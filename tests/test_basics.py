@@ -4,7 +4,7 @@ import pyslabs
 here = os.path.dirname(__file__)
 workdir = os.path.join(here, "workdir", "tests")
 
-NPROCS = 2
+NPROCS = 3
 NSIZE = 10
 NITER = 5
 

@@ -192,6 +192,12 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
             pickle.dump(self.config, fp)
             fp.flush()
             os.fsync(fp.fileno())
+
+        beginpath = os.path.join(self.root, _BEGIN_FILE)
+
+        if os.path.isfile(beginpath):
+            os.remove(beginpath)
+
 #
 #        # archive if requested
 #        if self.archive:
