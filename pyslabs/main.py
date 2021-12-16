@@ -4,7 +4,7 @@ from pyslabs import wrap
 
 
 _CONFIG_FILE = "__config__"
-_BEGIN_FILE = "__config__"
+_BEGIN_FILE = "__begin__"
 _FINISHED = "__finished__"
 _MAX_OPEN_WAIT = 10 # seconds
 _MAX_CLOSE_WAIT = 100 # seconds
@@ -89,13 +89,7 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
 
     def begin(self):
  
-        beginpath = os.path.join(self.root, _BEGIN_FILE)
-
-        with open(beginpath, "rb") as fp:
-            nprocs = pickle.load(fp)
- 
         self.config["__control__"]["master"] = {self.uuid: None}
-        self.config["__control__"]["nprocs"] = nprocs
 
         with open(self.cfgpath, "wb") as fp:
             pickle.dump(self.config, fp)
@@ -264,11 +258,14 @@ def master_open(path, mode="r", nprocs=1):
     if not os.path.isdir(path):
         raise Exception("Target path does not exist: %s" % path)
 
+    cfg = _CONFIG_INIT
+    cfg["__control__"]["nprocs"] = nprocs
+
     if mode[0] == "w":
-        return MasterPyslabsWriter(path, _CONFIG_INIT)
+        return MasterPyslabsWriter(path, cfg)
 
     elif mode[0] == "r":
-        return MasterPyslabsReader(path, _CONFIG_INIT)
+        return MasterPyslabsReader(path, cfg)
 
     else:
         raise Exception("Unknown open mode: %s" % str(mode))
