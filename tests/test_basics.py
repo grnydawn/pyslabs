@@ -25,7 +25,7 @@ def writelist(myid):
     slabs.close()
 
 
-def ttest_serial():
+def test_serial():
 
     if os.path.isdir(workdir):
         shutil.rmtree(workdir)
