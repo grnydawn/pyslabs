@@ -132,3 +132,5 @@ dmypy.json
 *.swp
 venv3spock
 venv3summit
+*.slabs
+*.zlabs

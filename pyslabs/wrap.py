@@ -20,7 +20,7 @@ def dump(slab, file):
 
     if atype == "numpy":
         import numpy as np
-        np.save(file, slab, allow_pickle=False)
+        np.save(file, slab)
 
     try:
         pickle.dump(slab, file)
@@ -50,7 +50,7 @@ def load(file, atype):
 
     if atype == "numpy":
         import numpy as np
-        slab = np.load(file, allow_pickle=False)
+        slab = np.load(file, allow_pickle=True)
         return ("numpy", slab)
 
     try:
