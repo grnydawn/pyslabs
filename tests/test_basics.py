@@ -56,14 +56,14 @@ def test_multiprocessing():
     if os.path.isdir(workdir):
         shutil.rmtree(workdir)
 
+    slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
+
     procs = []
 
     for i in range(NPROCS-1):
         p = Process(target=writelist, args=(i+1,))
         p.start()
         procs.append(p)
-
-    slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
 
     testvar = slabs.define_var("test")
 
