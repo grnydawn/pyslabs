@@ -8,6 +8,8 @@ SIM_TIME = 10 # 5 # 10     # total simulation time in seconds
 OUT_FREQ = 5 # 5 # 10       # frequency to perform output in seconds
 DATA_SPEC = "DATA_SPEC_THERMAL" # which data initialization to use
 NUM_VARS = 4        # number of fluid state variables
+OUTFILE = "miniweather_serial.slab" # output data file in pyslabs format
+
 
 class LocalDomain():
     """a local domain that has spatial state and computation of the domain
@@ -452,7 +454,7 @@ def main():
                         help='number of total grid cells in the z-dimension')
     parser.add_argument('-s', '--simtime', default=SIM_TIME,
                         type=float, help='total simulation time in seconds')
-    parser.add_argument('-o', '--outfreq', default=OUT_FREQ,
+    parser.add_argument('-f', '--outfreq', default=OUT_FREQ,
                         type=float, help='frequency to perform output in seconds')
     parser.add_argument('-d', '--dataspec', default=DATA_SPEC,
                         help='which data initialization to use')
