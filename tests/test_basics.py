@@ -43,11 +43,11 @@ def test_serial():
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
     data = slabs.get_array("test")
 
+    slabs.close()
+
     assert len(data) == NITER
     assert all([len(slab)==NSIZE for slab in data])
     assert all([sum(slab[1])==i for i, slab in enumerate(data)])
-
-    slabs.close()
 
 
 def test_multiprocessing():
@@ -73,15 +73,16 @@ def test_multiprocessing():
         mylist = [(0, i)]*NSIZE
         testvar.write(mylist, 0)
 
-    slabs.close()
-
     for i in range(NPROCS-1):
         procs[i].join()
+
+    slabs.close()
 
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
     data = slabs.get_array("test")
 
     slabs.close()
+
     #import pdb; pdb.set_trace()
     assert len(data) == NITER
     assert all([len(slab)==NSIZE*NPROCS for slab in data])
