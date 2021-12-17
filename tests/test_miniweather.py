@@ -12,7 +12,7 @@ NPROCS = 3
 NSIZE = 10
 NITER = 5
 
-def ttest_serial():
+def test_serial():
 
     if resdir not in sys.path:
         sys.path.append(resdir)
