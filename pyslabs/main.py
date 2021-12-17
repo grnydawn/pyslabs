@@ -240,7 +240,6 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
         if os.path.isfile(beginpath):
             os.remove(beginpath)
 
-
         # archive if requested
         if self.config["__control__"]["archive"]:
             slabpath = self.config["__control__"]["slabpath"]
@@ -264,9 +263,6 @@ class ParallelPyslabsReader():
         self.config = config
         self.slabpath = config["__control__"]["slabpath"]
 
-        with tarfile.open(self.slabpath, "r") as tar:
-            tar.extractall(self.root)
-
     def get_array(self, name):
 
         varcfg = self.config["vars"][name]
@@ -287,6 +283,13 @@ class ParallelPyslabsReader():
 
 
 class MasterPyslabsReader(ParallelPyslabsReader):
+
+    def __init__(self, workdir, config):
+
+        super(MasterPyslabsReader, self).__init__(workdir, config)
+
+        with tarfile.open(self.slabpath, "r") as tar:
+            tar.extractall(self.root)
 
     def close(self):
 
