@@ -2,7 +2,9 @@ import os, shutil
 import pyslabs
 
 here = os.path.dirname(__file__)
-workdir = os.path.join(here, "workdir", "tests")
+prjdir = os.path.join(here, "workdir")
+workdir = os.path.join(prjdir, "slabs")
+slabfile = os.path.join(prjdir, "test.slab")
 
 NPROCS = 3
 NSIZE = 10
@@ -13,7 +15,7 @@ def f(x):
 
 def writelist(myid):
 
-    slabs = pyslabs.parallel_open(workdir, mode="w")
+    slabs = pyslabs.parallel_open(slabfile, mode="w")
     testvar = slabs.get_var("test")
 
     for i in range(NITER):
@@ -28,7 +30,7 @@ def test_serial():
     if os.path.isdir(workdir):
         shutil.rmtree(workdir)
 
-    slabs = pyslabs.master_open(workdir, mode="w")
+    slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="w")
 
     testvar = slabs.define_var("test")
 
@@ -38,7 +40,8 @@ def test_serial():
 
     slabs.close()
 
-    slabs = pyslabs.master_open(workdir, mode="r")
+    import pdb; pdb.set_trace()
+    slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
     data = slabs.get_array("test")
 
     assert len(data) == NITER
@@ -48,7 +51,7 @@ def test_serial():
     slabs.close()
 
 
-def test_multiprocessing():
+def ttest_multiprocessing():
     from multiprocessing import Process
 
     if os.path.isdir(workdir):
@@ -61,7 +64,7 @@ def test_multiprocessing():
         p.start()
         procs.append(p)
 
-    slabs = pyslabs.master_open(workdir, mode="w", nprocs=NPROCS)
+    slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
 
     testvar = slabs.define_var("test")
 
@@ -76,7 +79,7 @@ def test_multiprocessing():
     for i in range(NPROCS-1):
         procs[i].join()
 
-    slabs = pyslabs.master_open(workdir, mode="r")
+    slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
     data = slabs.get_array("test")
 
     #import pdb; pdb.set_trace()

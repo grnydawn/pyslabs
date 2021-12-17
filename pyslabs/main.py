@@ -1,4 +1,4 @@
-import os, pickle, shutil, time, uuid
+import os, pickle, shutil, time, uuid, tarfile
 
 from pyslabs import wrap
 
@@ -6,6 +6,10 @@ from pyslabs import wrap
 _CONFIG_FILE = "__config__"
 _BEGIN_FILE = "__begin__"
 _FINISHED = "__finished__"
+_EXT = ".slab"
+_CEXT = ".cslab"
+_BEGIN_EXT = ".__slabbegin__"
+_WORKDIR_EXT = ".__slabtmp__"
 _MAX_OPEN_WAIT = 10 # seconds
 _MAX_CLOSE_WAIT = 100 # seconds
 _CONFIG_INIT = {
@@ -14,7 +18,6 @@ _CONFIG_INIT = {
     "vars": {},
     "attrs": {},
     "__control__": {
-        "master": None,
         "nprocs": 1,
     }
 } 
@@ -70,6 +73,8 @@ class ParallelPyslabsWriter():
         self.cfgpath = os.path.join(self.root, _CONFIG_FILE)
         self.config = config
 
+        os.makedirs(self.path)
+
     def get_var(self, name):
 
         varcfg = self.config["vars"][name]
@@ -78,9 +83,8 @@ class ParallelPyslabsWriter():
 
     def close(self):
 
-        # notify master that it is finished
         with open(os.path.join(self.path, _FINISHED), "w") as fp:
-            fp.write("DONE")
+            fp.write("FINISHED")
             fp.flush()
             os.fsync(fp.fileno())
 
@@ -88,13 +92,41 @@ class ParallelPyslabsWriter():
 class MasterPyslabsWriter(ParallelPyslabsWriter):
 
     def begin(self):
- 
-        self.config["__control__"]["master"] = {self.uuid: None}
 
         with open(self.cfgpath, "wb") as fp:
             pickle.dump(self.config, fp)
             fp.flush()
             os.fsync(fp.fileno())
+
+        procs = []
+ 
+        start = time.time()
+        nprocs = self.config["__control__"]["nprocs"]
+
+        while time.time() - start < _MAX_OPEN_WAIT:
+
+            procs.clear()
+
+            for item in os.listdir(self.root):
+                if item == self.uuid:
+                    procs.append(os.path.join(self.root, item))
+                    time.sleep(0.1)
+                    continue
+
+                try:
+                    if len(item) == len(self.uuid) and int(item, 16):
+                        proc = os.path.join(self.root, item)
+                        procs.append(proc)
+
+                except ValueError:
+                    pass
+
+            if len(procs) == nprocs:
+                break
+
+        if len(procs) != nprocs:
+            raise Exception("Number of processes mismatch: %d != %d" %
+                    (len(procs), nprocs))
 
     def define_var(self, name):
 
@@ -105,6 +137,16 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
 
     def close(self):
  
+        with open(os.path.join(self.path, _FINISHED), "w") as fp:
+            fp.write("FINISHED")
+            fp.flush()
+            os.fsync(fp.fileno())
+
+        beginpath = self.config["__control__"]["beginpath"]
+
+        if os.path.isfile(beginpath):
+            os.remove(beginpath)
+
         def _move_dim(src, dst):
             
             for dim in os.listdir(src):
@@ -158,18 +200,6 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
                     if len(item) == len(self.uuid) and int(item, 16):
                         proc = os.path.join(self.root, item)
                         procs.append(proc)
-                        finished = os.path.join(proc, _FINISHED)
-                        timeout = True
-
-                        while time.time() - start < _MAX_CLOSE_WAIT:
-                            if os.path.isfile(finished):
-                                os.remove(finished)
-                                timeout = False
-                                break
-                            time.sleep(0.1)
-
-                        if timeout:
-                            raise Exception("Error: timeout on waiting for parallel process finish.")
 
                 except ValueError:
                     pass
@@ -181,12 +211,24 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
             raise Exception("Number of processes mismatch: %d != %d" %
                     (len(procs), nprocs))
 
+        for proc in procs:
+            finished = os.path.join(proc, _FINISHED)
+            timeout = True
+
+            while time.time() - start < _MAX_CLOSE_WAIT:
+                if os.path.isfile(finished):
+                    os.remove(finished)
+                    timeout = False
+                    break
+                time.sleep(0.1)
+
+            if timeout:
+                raise Exception("Error: timeout on waiting for parallel process finish.")
+
         # restructure data folders
         for src in procs:
             _move_proc(src, self.root)
             shutil.rmtree(src)
-
-        self.config["__control__"]["master"] = None
 
         with open(self.cfgpath, "wb") as fp:
             pickle.dump(self.config, fp)
@@ -198,26 +240,32 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
         if os.path.isfile(beginpath):
             os.remove(beginpath)
 
-#
-#        # archive if requested
-#        if self.archive:
-#            dirname, basename = os.path.split(self.root)
-#            arcpath = os.path.join(dirname, basename+_EXT)
-#
-#            with tarfile.open(arcpath, "w") as tar:
-#                tar.add(self.root, arcname=basename)
-#
-#            #shutil.rmtree(self.root)
+
+        # archive if requested
+        if self.config["__control__"]["archive"]:
+            slabpath = self.config["__control__"]["slabpath"]
+            dirname, basename = os.path.split(self.root)
+
+            with tarfile.open(slabpath, "w") as tar:
+                for item in os.listdir(self.root):
+                    itempath = os.path.join(self.root, item)
+                    tar.add(itempath, arcname=item)
+
+            shutil.rmtree(self.root)
 
         # TODO: coordinate with slaves removing output paths
 
 
 class ParallelPyslabsReader():
 
-    def __init__(self, root, config):
-        self.root = root
+    def __init__(self, workdir, config):
+        self.root = workdir
         self.cfgpath = os.path.join(self.root, _CONFIG_FILE)
         self.config = config
+        self.slabpath = config["__control__"]["slabpath"]
+
+        with tarfile.open(self.slabpath, "r") as tar:
+            tar.extractall(self.root)
 
     def get_array(self, name):
 
@@ -228,7 +276,6 @@ class ParallelPyslabsReader():
         return wrap.get_array(var)
 
     def close(self):
-
         pass
 
     def __enter__(self):
@@ -240,69 +287,107 @@ class ParallelPyslabsReader():
 
 
 class MasterPyslabsReader(ParallelPyslabsReader):
-    pass
+
+    def close(self):
+
+        if os.path.isdir(self.root):
+            shutil.rmtree(self.root)
 
 
-def master_open(path, mode="r", nprocs=1):
+def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
 
-    beginpath = os.path.join(path, _BEGIN_FILE)
+    if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
+        base, ext = os.path.splitext(slabpath)
+        beginpath = base + _BEGIN_EXT
+
+        if workdir is None:
+            workdir = base + _WORKDIR_EXT
+    else:
+        beginpath = slabpath + _BEGIN_EXT
+        if workdir is None:
+            workdir = slabpath + _WORKDIR_EXT
+        slabpath += _EXT
+
+    # create root directory
+    os.makedirs(workdir, exist_ok=False)
 
     if mode == "w":
 
-        # create root directory
-        os.makedirs(path, exist_ok=False)
-
         # create a config file
         with open(beginpath, "wb") as fp:
-            pickle.dump(nprocs, fp)
+            begin = {"workdir": workdir}
+            pickle.dump(begin, fp)
             fp.flush()
             os.fsync(fp.fileno())
 
         if not os.path.isfile(beginpath):
             raise Exception("Can not create a flag file: %s" % beginpath)
 
-    if not os.path.isdir(path):
-        raise Exception("Target path does not exist: %s" % path)
+    if not os.path.isdir(workdir):
+        raise Exception("Work directory does not exist: %s" % workdir)
 
     cfg = _CONFIG_INIT
     cfg["__control__"]["nprocs"] = nprocs
+    cfg["__control__"]["archive"] = archive
+    cfg["__control__"]["beginpath"] = beginpath
+    cfg["__control__"]["slabpath"] = slabpath
 
     if mode[0] == "w":
-        return MasterPyslabsWriter(path, cfg)
+        return MasterPyslabsWriter(workdir, cfg)
 
     elif mode[0] == "r":
-        return MasterPyslabsReader(path, cfg)
+        return MasterPyslabsReader(workdir, cfg)
 
     else:
         raise Exception("Unknown open mode: %s" % str(mode))
 
 
-def parallel_open(path, mode="r"):
-
-    start = time.time()
-    while time.time() - start < _MAX_OPEN_WAIT:
-        if os.path.isdir(path):
-            break
-        time.sleep(0.1)
-
-    if not os.path.isdir(path):
-        raise Exception("Target path does not exist: %s" % path)
+def parallel_open(slabpath, mode="r"):
+#
+#    start = time.time()
+#    while time.time() - start < _MAX_OPEN_WAIT:
+#        if os.path.isdir(path):
+#            break
+#        time.sleep(0.1)
+#
+#    if not os.path.isdir(path):
+#        raise Exception("Target path does not exist: %s" % path)
  
-    beginpath = os.path.join(path, _BEGIN_FILE)
+#    slabdir, slabfile = os.path.split(slabpath)
+#
+#    if slabfile.endswith(_EXT) or slabfile.endswith(_CEXT):
+#        workdir = slabpath + _WORK_DIR
+#
+#    else:
+#        slabfile += _EXT
+#        slabpath = os.path.join(slabdir, slabfile)
+#        workdir = slabdir
+#
+#    beginpath = os.path.join(slabdir, _BEGIN_FILE)
+
+    if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
+        base, ext = os.path.splitext(slabpath)
+        beginpath = base + _BEGIN_EXT
+
+    else:
+        beginpath = slabpath + _BEGIN_EXT
 
     start = time.time()
     while time.time() - start < _MAX_OPEN_WAIT:
         if os.path.isfile(beginpath):
+            with open(beginfile, "rb") as fp:
+                begin = pickle.load(fp)
+                workdir = begin["workdir"]
             break
         time.sleep(0.1)
 
-    if not os.path.isfile(beginpath):
+    if workdir is None:
         raise Exception("No begin notification: %s" % beginpath)
  
     start = time.time()
     while time.time() - start < _MAX_OPEN_WAIT:
 
-        cfgpath = os.path.join(path, _CONFIG_FILE)
+        cfgpath = os.path.join(workdir, _CONFIG_FILE)
 
         if not os.path.isfile(cfgpath):
             time.sleep(0.1)
@@ -312,10 +397,10 @@ def parallel_open(path, mode="r"):
             cfg = pickle.load(fp)
 
             if mode[0] == "w":
-                return ParallelPyslabsWriter(path, cfg)
+                return ParallelPyslabsWriter(workdir, cfg)
 
             elif mode[0] == "r":
-                return ParallelPyslabsReader(path, cfg)
+                return ParallelPyslabsReader(workdir, cfg)
 
             else:
                 raise Exception("Unknown open mode: %s" % str(mode))
