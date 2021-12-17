@@ -25,7 +25,7 @@ def writelist(myid):
     slabs.close()
 
 
-def test_serial():
+def ttest_serial():
 
     if os.path.isdir(workdir):
         shutil.rmtree(workdir)
@@ -40,7 +40,6 @@ def test_serial():
 
     slabs.close()
 
-    import pdb; pdb.set_trace()
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
     data = slabs.get_array("test")
 
@@ -51,7 +50,7 @@ def test_serial():
     slabs.close()
 
 
-def ttest_multiprocessing():
+def test_multiprocessing():
     from multiprocessing import Process
 
     if os.path.isdir(workdir):

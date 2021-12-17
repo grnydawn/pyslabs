@@ -309,7 +309,14 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
         slabpath += _EXT
 
     # create root directory
-    os.makedirs(workdir, exist_ok=False)
+    os.makedirs(workdir, exist_ok=True)
+    for item in os.listdir(workdir):
+        itempath = os.path.join(workdir, item)
+
+        if os.path.isdir(itempath):
+            shutil.rmtree(itempath)
+        else:
+            os.remove(itempath)
 
     if mode == "w":
 
@@ -375,7 +382,7 @@ def parallel_open(slabpath, mode="r"):
     start = time.time()
     while time.time() - start < _MAX_OPEN_WAIT:
         if os.path.isfile(beginpath):
-            with open(beginfile, "rb") as fp:
+            with open(beginpath, "rb") as fp:
                 begin = pickle.load(fp)
                 workdir = begin["workdir"]
             break
