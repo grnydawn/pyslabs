@@ -21,6 +21,7 @@ import sphinx_rtd_theme
 project = 'pyslabs'
 copyright = '2021, Youngsung Kim'
 author = 'Youngsung Kim'
+email = 'youngsung.kim.act2@gmail.com'
 
 # The full version, including alpha/beta/rc tags
 release = '0.1.1'
