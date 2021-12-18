@@ -43,7 +43,7 @@ def main():
     slabs.close()
 
     with pyslabs.master_open(slabfile, mode="r") as slabs:
-        data = slabs.get_array("test")
+        data = slabs.get_array("test", squeeze=True)
 
     print(type(data))
     print(data)

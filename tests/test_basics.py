@@ -42,7 +42,6 @@ def test_serial():
 
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
     data = slabs.get_array("test")
-
     slabs.close()
 
     assert len(data) == NITER
@@ -83,7 +82,6 @@ def test_multiprocessing():
 
     slabs.close()
 
-    #import pdb; pdb.set_trace()
     assert len(data) == NITER
     assert all([len(slab)==NSIZE*NPROCS for slab in data])
     assert data[NITER-1][NSIZE*NPROCS-1] == (NPROCS-1, NITER-1)

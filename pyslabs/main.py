@@ -271,13 +271,13 @@ class ParallelPyslabsReader():
         self.config = config
         self.slabpath = config["__control__"]["slabpath"]
 
-    def get_array(self, name):
+    def get_array(self, name, squeeze=False):
 
         varcfg = self.config["vars"][name]
 
         var = VariableReader(os.path.join(self.root, name), varcfg)
 
-        return wrap.get_array(var)
+        return wrap.get_array(var, squeeze)
 
     def close(self):
         pass
