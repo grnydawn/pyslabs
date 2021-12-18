@@ -1,4 +1,4 @@
-import os, pickle, shutil, time, uuid, tarfile
+import os, io, pickle, shutil, time, uuid, tarfile
 
 from pyslabs import wrap
 
@@ -7,7 +7,7 @@ _CONFIG_FILE = "__config__"
 _BEGIN_FILE = "__begin__"
 _FINISHED = "__finished__"
 _EXT = ".slab"
-_CEXT = ".cslab"
+_CEXT = ".zlab"
 _BEGIN_EXT = ".__slabbegin__"
 _WORKDIR_EXT = ".__slabtmp__"
 _MAX_OPEN_WAIT = 10 # seconds
@@ -31,9 +31,12 @@ class VariableWriter():
         self.config = config
         self.writecount = 0
 
-    def write(self, slab, start):
+    def write(self, slab, start=None):
 
         path = self.path
+
+        if start is None:
+            start = (0,) * wrap.ndim(slab)
 
         try:
             for _s in start:
@@ -63,7 +66,6 @@ class VariableReader():
         self.config = config
 
 
-
 class ParallelPyslabsWriter():
 
     def __init__(self, root, config):
@@ -83,7 +85,7 @@ class ParallelPyslabsWriter():
 
     def close(self):
 
-        with open(os.path.join(self.path, _FINISHED), "w") as fp:
+        with io.open(os.path.join(self.path, _FINISHED), "w") as fp:
             fp.write("FINISHED")
             fp.flush()
             os.fsync(fp.fileno())
@@ -91,9 +93,15 @@ class ParallelPyslabsWriter():
 
 class MasterPyslabsWriter(ParallelPyslabsWriter):
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self.close()
+
     def begin(self):
 
-        with open(self.cfgpath, "wb") as fp:
+        with io.open(self.cfgpath, "wb") as fp:
             pickle.dump(self.config, fp)
             fp.flush()
             os.fsync(fp.fileno())
@@ -137,7 +145,7 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
 
     def close(self):
  
-        with open(os.path.join(self.path, _FINISHED), "w") as fp:
+        with io.open(os.path.join(self.path, _FINISHED), "w") as fp:
             fp.write("FINISHED")
             fp.flush()
             os.fsync(fp.fileno())
@@ -230,7 +238,7 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
             _move_proc(src, self.root)
             shutil.rmtree(src)
 
-        with open(self.cfgpath, "wb") as fp:
+        with io.open(self.cfgpath, "wb") as fp:
             pickle.dump(self.config, fp)
             fp.flush()
             os.fsync(fp.fileno())
@@ -291,6 +299,12 @@ class MasterPyslabsReader(ParallelPyslabsReader):
         with tarfile.open(self.slabpath, "r") as tar:
             tar.extractall(self.root)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self.close()
+
     def close(self):
 
         if os.path.isdir(self.root):
@@ -324,7 +338,7 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
     if mode == "w":
 
         # create a config file
-        with open(beginpath, "wb") as fp:
+        with io.open(beginpath, "wb") as fp:
             begin = {"workdir": workdir}
             pickle.dump(begin, fp)
             fp.flush()
@@ -353,28 +367,7 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
 
 
 def parallel_open(slabpath, mode="r"):
-#
-#    start = time.time()
-#    while time.time() - start < _MAX_OPEN_WAIT:
-#        if os.path.isdir(path):
-#            break
-#        time.sleep(0.1)
-#
-#    if not os.path.isdir(path):
-#        raise Exception("Target path does not exist: %s" % path)
  
-#    slabdir, slabfile = os.path.split(slabpath)
-#
-#    if slabfile.endswith(_EXT) or slabfile.endswith(_CEXT):
-#        workdir = slabpath + _WORK_DIR
-#
-#    else:
-#        slabfile += _EXT
-#        slabpath = os.path.join(slabdir, slabfile)
-#        workdir = slabdir
-#
-#    beginpath = os.path.join(slabdir, _BEGIN_FILE)
-
     if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
         base, ext = os.path.splitext(slabpath)
         beginpath = base + _BEGIN_EXT
@@ -385,7 +378,7 @@ def parallel_open(slabpath, mode="r"):
     start = time.time()
     while time.time() - start < _MAX_OPEN_WAIT:
         if os.path.isfile(beginpath):
-            with open(beginpath, "rb") as fp:
+            with io.open(beginpath, "rb") as fp:
                 begin = pickle.load(fp)
                 workdir = begin["workdir"]
             break
@@ -403,7 +396,7 @@ def parallel_open(slabpath, mode="r"):
             time.sleep(0.1)
             continue
 
-        with open(cfgpath, "rb") as fp:
+        with io.open(cfgpath, "rb") as fp:
             cfg = pickle.load(fp)
 
             if mode[0] == "w":
@@ -416,3 +409,7 @@ def parallel_open(slabpath, mode="r"):
                 raise Exception("Unknown open mode: %s" % str(mode))
 
     raise Exception("Target configuration is not configured: %s" % cfgpath)
+
+
+def open(*vargs, **kwargs):
+    return master_open(*vargs, **kwargs)

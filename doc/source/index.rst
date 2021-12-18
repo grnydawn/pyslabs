@@ -11,43 +11,21 @@ pyslabs
 
 pyslabs is a pure Python parallel I/O module.
 
-Highlights
+Features
 ----------
 
 * Create arrays with any pickle-able objects.
 * Create arrays with famous data formats such as Numpy.
 * Support serial, multiprocessing, and MPI programming.
-* Write quickly using task-local files.
+* Generate data files quickly using task-local files.
 * Read only the parts of an array per requests(under development).
 * Unload parts of an array to reduce main memory usage(under development).
 
-Status
+Notice
 ------
 
 pyslabs is an experimental project as of this version.
 
-Installation
-------------
-
-Install pyslabs from PyPI::
-
-    $ pip install pyslabs
-
-
-To install the latest development version of pyslabs, you can use pip with the
-latest GitHub master::
-
-    $ pip install git+https://github.com/grnydawn/pyslabs.git
-
-To work with pyslabs source code in development, install from GitHub::
-
-    $ git clone https://github.com/grnydawn/pyslabs.git
-    $ cd pyslabs
-    $ python setup.py install
-
-To verify pyslabs installation, run the pyslabs command-line tool::
-
-    $ slabs --version # under development
 
 Contents
 --------
@@ -55,9 +33,10 @@ Contents
 .. toctree::
     :maxdepth: 2
 
+    install
     tutorial
     api
-    slabs
+    tools
 
 
 Acknowledgments

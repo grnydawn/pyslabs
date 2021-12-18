@@ -1,3 +1,3 @@
 # pyslabs module
 
-from .main import master_open, parallel_open
+from .main import master_open, parallel_open, open

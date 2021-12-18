@@ -134,3 +134,5 @@ venv3spock
 venv3summit
 *.slabs
 *.zlabs
+*.slab
+*.zlab

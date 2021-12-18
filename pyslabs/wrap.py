@@ -21,6 +21,7 @@ def dump(slab, file):
     if atype == "numpy":
         import numpy as np
         np.save(file, slab)
+        return
 
     try:
         pickle.dump(slab, file)
@@ -32,6 +33,32 @@ def dump(slab, file):
             pickle.dump(slab, fp)
             fp.flush()
             os.fsync(fp.fileno())
+
+
+def concat(arrays, atype):
+
+    if not arrays:
+        return arrays
+
+    if atype == "numpy":
+        import numpy as np
+        return np.concatenate(arrays)
+
+    try:
+        output = arrays[0]
+        for item in arrays[1:]:
+            output += item
+
+    except TypeError:
+        output = arrays[0]
+        for item in arrays[1:]:
+            if isinstance(output, dict):
+                output.update(item)
+            else:
+                raise Exception("Not supported type for concatenation: %s" %
+                                str(type(output)))
+
+    return output
 
 
 def stack(arrays, atype):
@@ -63,7 +90,7 @@ def load(file, atype):
     return ("pickle", slab)
 
 
-def concat(bucket, array):
+def _concat(bucket, array):
 
     if bucket[1] is None:
         bucket[1] = array[1]
@@ -82,7 +109,6 @@ def concat(bucket, array):
         import numpy as np
         bucket[0] = atype
         bucket[1] = np.concatenate((bucket[1], array[1]))
-
         return
 
     bucket[0] = atype
@@ -93,42 +119,80 @@ def concat(bucket, array):
 
 def _merge(path):
 
-    _b = []
-    _stack = []
+    _d = []
+    _f = []
     _atype = None
 
     for item in sorted(os.listdir(path)):
         _p = os.path.join(path, item)
 
         if os.path.isdir(_p):
-            _b.append(_merge(_p))
+            _d.append(_merge(_p))
 
         elif os.path.isfile(_p):
             _, atype, _ = item.split(".")
 
             if _atype is None:
                 _atype = atype
-                _stack.append(load(_p, atype)[1])
+                _f.append(load(_p, atype)[1])
 
             elif _atype != atype:
                 raise Exception("Different type exists in a stack: %s != %s" % (_atype, atype))
 
             else:
-                _stack.append(load(_p, atype)[1])
+                _f.append(load(_p, atype)[1])
             
         else:
             raise Exception("Unknown file type: %s" % _p)
 
-    if _stack:
-        _m = [_atype, stack(_stack, _atype)]
+    if _f:
+        ###
+        _m = [_atype, concat(_f, _atype)]
 
     else:
         _m = [None, None]
 
-    for _i in _b:
-        concat(_m, _i)
+    for _i in _d:
+        _concat(_m, _i)
         
     return _m
+
+
+def shape(slab):
+
+    atype, ext = arraytype(slab)
+
+    if atype == "numpy":
+        import numpy as np
+        return slab.shape
+
+    s = []
+
+    while (slab):
+        try:
+            l = len(slab)
+
+            if l > 0:
+                s.append(l)
+                slab = slab[0]
+
+            else:
+                break
+        except TypeError:
+            break
+
+    return tuple(s)
+
+
+def ndim(slab):
+
+    atype, ext = arraytype(slab)
+
+    if atype == "numpy":
+        import numpy as np
+        return slab.ndim
+
+    return(len(shape(slab)))
 
 
 def get_array(var):
