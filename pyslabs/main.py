@@ -1,6 +1,6 @@
 import os, io, pickle, shutil, time, uuid, tarfile
 
-from pyslabs import wrap
+from pyslabs import data
 
 
 _CONFIG_FILE = "__config__"
@@ -36,7 +36,7 @@ class VariableWriter():
         path = self.path
 
         if start is None:
-            start = (0,) * wrap.ndim(slab)
+            start = (0,) * data.ndim(slab)
 
         try:
             for _s in start:
@@ -50,10 +50,10 @@ class VariableWriter():
             os.makedirs(path)
 
         wc = str(self.writecount)
-        atype, ext = wrap.arraytype(slab)
+        atype, ext = data.arraytype(slab)
         slabpath = os.path.join(path, ".".join([wc, atype, ext])) 
 
-        wrap.dump(slab, slabpath)
+        data.dump(slab, slabpath)
 
         self.writecount += 1
 
@@ -277,7 +277,7 @@ class ParallelPyslabsReader():
 
         var = VariableReader(os.path.join(self.root, name), varcfg)
 
-        return wrap.get_array(var, squeeze)
+        return data.get_array(var, squeeze)
 
     def close(self):
         pass

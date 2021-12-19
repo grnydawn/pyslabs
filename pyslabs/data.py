@@ -1,4 +1,5 @@
 import os, pickle
+import pyslabs.data_numpy as dnp
 
 _supported_arrays = {
     "numpy": (lambda a: (type(a).__name__=="ndarray" and
@@ -19,9 +20,7 @@ def dump(slab, file):
     atype, ext = arraytype(slab)
 
     if atype == "numpy":
-        import numpy as np
-        np.save(file, slab)
-        return
+        return dnp.dump(slab, file)
 
     try:
         pickle.dump(slab, file)
@@ -41,8 +40,7 @@ def concat(arrays, atype):
         return arrays
 
     if atype == "numpy":
-        import numpy as np
-        return np.concatenate(arrays, axis=0)
+        return dnp.concat(arrays, axis=0)
 
     try:
         output = arrays[0]
@@ -67,8 +65,7 @@ def stack(arrays, atype):
         return arrays
 
     if atype == "numpy":
-        import numpy as np
-        return np.stack(arrays)
+        return dnp.stack(arrays)
 
     try:
         return type(arrays[0])(arrays)
@@ -80,9 +77,7 @@ def stack(arrays, atype):
 def load(file, atype):
 
     if atype == "numpy":
-        import numpy as np
-        slab = np.load(file, allow_pickle=True)
-        return ("numpy", slab)
+        return (atype, dnp.load(file))
 
     try:
         slab = pickle.load(file)
@@ -99,8 +94,7 @@ def shape(slab):
     atype, ext = arraytype(slab)
 
     if atype == "numpy":
-        import numpy as np
-        return slab.shape
+        return dnp.shape(slab)
 
     s = []
 
@@ -125,8 +119,7 @@ def ndim(slab):
     atype, ext = arraytype(slab)
 
     if atype == "numpy":
-        import numpy as np
-        return slab.ndim
+        return dnp.ndim(slab)
 
     return(len(shape(slab)))
 
@@ -141,8 +134,7 @@ def squeeze(slab):
     atype, ext = arraytype(slab)
 
     if atype == "numpy":
-        import numpy as np
-        return np.squeeze(slab, axis=0)
+        return dnp.squeeze(slab)
 
     if length(slab, 0) == 1:
         return slab[0]
@@ -165,9 +157,8 @@ def _concat(bucket, array):
         import pdb; pdb.set_trace()
 
     if atype == "numpy":
-        import numpy as np
         bucket[0] = atype
-        bucket[1] = np.concatenate((bucket[1], array[1]), axis=1)
+        bucket[1] = dnp.concat((bucket[1], array[1]), axis=1)
         return
 
     bucket[0] = atype
