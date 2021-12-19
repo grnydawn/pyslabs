@@ -1,10 +1,11 @@
-import os, io, pickle, shutil, time, uuid, tarfile
+import os, io, pickle, shutil, time, uuid, tarfile, copy
 
 from pyslabs import data
 
 
 _CONFIG_FILE = "__config__"
 _BEGIN_FILE = "__begin__"
+_VARCFG_FILE = "__varcfg__"
 _FINISHED = "__finished__"
 _EXT = ".slab"
 _CEXT = ".zlab"
@@ -21,7 +22,11 @@ _CONFIG_INIT = {
         "nprocs": 1,
     }
 } 
-
+_VARCFG_INIT = {
+    "writes": {},
+    "shape": None,
+    "check": {}
+} 
 
 class VariableWriter():
 
@@ -31,25 +36,59 @@ class VariableWriter():
         self.config = config
         self.writecount = 0
 
-    def write(self, slab, start=None):
+    def write(self, slab, start=None, shape=None):
 
-        path = self.path
+        # get slab info
+        slabshape = data.shape(slab)
+        slabndim = len(slabshape)
+
+        # shape check
+        if shape:
+            if tuple(shape) != slabshape:
+                raise Exception("Shape check fails: %s != %s" %
+                        (str(shape) != str(slabshape)))
 
         if start is None:
-            start = (0,) * data.ndim(slab)
+            start = (0,) * len(slabshape)
+
+        # generate shape
+        if self.config["shape"] is None:
+            self.config["shape"] = [1] + list(slabshape)
+
+        else:
+            if tuple(self.config["shape"][1:]) != tuple(slabshape):
+                raise Exception("Shape check fails: %s != %s" %
+                        (str(self.config["shape"][1:]) != str(slabshape)))
+
+            self.config["shape"][0] += 1
+
+        # generate relative path to data file
+
+        slabpath = []
 
         try:
             for _s in start:
-                path = os.path.join(path, str(_s))
-                break
+                slabpath.append(str(_s))
 
         except TypeError:
-            path = os.path.join(path, str(start))
+            slabpath.append(str(start))
+
+        wc = str(self.writecount)
+        
+        if wc in self.config["writes"]:
+            writes = self.config["writes"][wc]
+
+        else:
+            writes = {}
+            self.config["writes"][wc] = writes
+
+        writes["/".join(slabpath)] = (start, slabshape)
+
+        path = os.path.join(self.path, *slabpath)
 
         if not os.path.isdir(path):
             os.makedirs(path)
 
-        wc = str(self.writecount)
         atype, ext = data.arraytype(slab)
         slabpath = os.path.join(path, ".".join([wc, atype, ext])) 
 
@@ -60,10 +99,16 @@ class VariableWriter():
 
 class VariableReader():
 
-    def __init__(self, slabobj, config):
+    def __init__(self, tfile, slabmap, config):
 
-        self.slabobj = slabobj
-        self.config = config
+        self._tfile = tfile
+        self._slabmap = slabmap
+        self._config = config
+        self.shape = tuple(self._config["shape"])
+
+    @property
+    def ndim(self):
+        return len(self.shape)
 
     def __len__(self):
         import pdb; pdb.set_trace()
@@ -117,6 +162,13 @@ class ParallelPyslabsWriter():
             fp.flush()
             os.fsync(fp.fileno())
 
+        for name, cfg in self.config["vars"].items():
+            with io.open(os.path.join(self.path, name, _VARCFG_FILE), "wb") as fp:
+                pickle.dump(cfg, fp)
+                fp.flush()
+                os.fsync(fp.fileno())
+
+
 
 class MasterPyslabsWriter(ParallelPyslabsWriter):
 
@@ -163,26 +215,27 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
             raise Exception("Number of processes mismatch: %d != %d" %
                     (len(procs), nprocs))
 
-    def define_var(self, name):
+    def define_var(self, name, shape=None):
 
-        varcfg = {}
+        varcfg = copy.deepcopy(_VARCFG_INIT)
+
+        if shape:
+            varcfg["check"]["shape"] = shape
+
         self.config["vars"][name] = varcfg
 
         return VariableWriter(os.path.join(self.path, name), varcfg)
 
     def close(self):
  
-        with io.open(os.path.join(self.path, _FINISHED), "w") as fp:
-            fp.write("FINISHED")
-            fp.flush()
-            os.fsync(fp.fileno())
+        super(MasterPyslabsWriter, self).close()
 
         beginpath = self.config["__control__"]["beginpath"]
 
         if os.path.isfile(beginpath):
             os.remove(beginpath)
 
-        def _move_dim(src, dst):
+        def _move_dim(src, dst, attrs):
             
             for dim in os.listdir(src):
                 srcpath = os.path.join(src, dim)
@@ -190,7 +243,7 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
 
                 if os.path.isdir(srcpath):
                     if os.path.isdir(dstpath):
-                        _move_dim(srcpath, dstpath) 
+                        _move_dim(srcpath, dstpath, attrs) 
 
                     elif os.path.exists(dstpath):
                         raise Exception("Destination path already exists: %s" % dstpath)
@@ -204,17 +257,30 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
                 else:
                     shutil.move(srcpath, dstpath)
               
-        def _move_proc(src, dst):
+        def _move_proc(src, dst, attrs):
 
             for var in os.listdir(src): 
+
                 dstvar = os.path.join(dst, var)
                 srcvar = os.path.join(src, var)
 
-                if not os.path.isdir(dstvar):
-                    shutil.move(srcvar, dstvar)
+                if not var.startswith("_") and var not in attrs["vars"]:
+                    attrs["vars"][var] = {"config": []}
+
+                varcfg = os.path.join(srcvar, _VARCFG_FILE)
+
+                with io.open(varcfg, "rb") as fp:
+                    _cfg = pickle.load(fp)
+
+                attrs["vars"][var]["config"].append(_cfg)
+
+                os.remove(varcfg)
+
+                if os.path.isdir(dstvar):
+                    _move_dim(srcvar, dstvar, attrs) 
 
                 else:
-                    _move_dim(srcvar, dstvar) 
+                    shutil.move(srcvar, dstvar)
 
         procs = []
 
@@ -260,24 +326,66 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
             if timeout:
                 raise Exception("Error: timeout on waiting for parallel process finish.")
 
+        attrs = {"vars": {}}
+
         # restructure data folders
         for src in procs:
-            _move_proc(src, self.root)
+            _move_proc(src, self.root, attrs)
             shutil.rmtree(src)
+
+        _shape = None
+
+        for vn, vc in attrs["vars"].items():
+            for _vcfg in vc["config"]:
+                _vshape = _vcfg["shape"]
+                if _shape is None:
+                    _shape = _vshape
+
+                elif _shape[0] != _vshape[0] or _shape[2:] != _vshape[2:]:
+                    raise Exception("Shape mismatch: %s != %s" % (str(_shape), str(_vshape)))
+
+                else:
+                    _shape[1] += _vshape[1]
+
+        for name, varcfg in self.config["vars"].items():
+
+            if varcfg["check"]:
+                for check, test in varcfg["check"].items():
+                    if check == "shape":
+                        if isinstance(test, int):
+                            if _shape[0] != test:
+                                raise Exception("stack dimension mismatch: %d != %d" %
+                                        (_shape[0], test))
+
+                        elif len(test) > 0:
+
+                            if test[0] is not True and _shape[0] != test[0]:
+                                raise Exception("stack dimension mismatch: %d != %d" %
+                                        (_shape[0], test[0]))
+
+                            if tuple(test[1:]) != tuple(_shape[1:]):
+                                raise Exception("slab shape mismatch: %s != %s" %
+                                        (str(test[1:]), str(tuple(_shape[1:]))))
+
+                    else:
+                        raise Exception("Unknown variable test: %s" % check)
+
+
+        archive = self.config["__control__"]["archive"]
+        slabpath = self.config["__control__"]["slabpath"]
+
+        self.config.pop("__control__")
 
         with io.open(self.cfgpath, "wb") as fp:
             pickle.dump(self.config, fp)
             fp.flush()
             os.fsync(fp.fileno())
 
-        beginpath = os.path.join(self.root, _BEGIN_FILE)
-
         if os.path.isfile(beginpath):
             os.remove(beginpath)
 
         # archive if requested
-        if self.config["__control__"]["archive"]:
-            slabpath = self.config["__control__"]["slabpath"]
+        if archive:
             dirname, basename = os.path.split(self.root)
 
             with tarfile.open(slabpath, "w") as tar:
@@ -383,7 +491,6 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
             else:
                 os.remove(itempath)
 
-        # create a config file
         with io.open(beginpath, "wb") as fp:
             begin = {"workdir": workdir}
             pickle.dump(begin, fp)
@@ -396,7 +503,7 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
         if not os.path.isdir(workdir):
             raise Exception("Work directory does not exist: %s" % workdir)
 
-        cfg = _CONFIG_INIT
+        cfg = copy.deepcopy(_CONFIG_INIT)
         cfg["__control__"]["nprocs"] = nprocs
         cfg["__control__"]["archive"] = archive
         cfg["__control__"]["beginpath"] = beginpath

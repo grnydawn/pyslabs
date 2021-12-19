@@ -1,5 +1,6 @@
 NAME := pyslabs
 PY := python3
+FILE ?= test_basics.py
 
 .PHONY: clean clean-test clean-pyc clean-build doc help
 .DEFAULT_GOAL := help
@@ -61,6 +62,9 @@ lint: ## check style with flake8
 test: ## run tests quickly with the default Python: --tb=short
 	pytest ./tests -s -vv --pyargs pyslabs
 	#pytest ./tests -s -v --pyargs pyslabs --tb=short
+
+testone: ## run tests quickly with the default Python: --tb=short
+	pytest ./tests/${FILE} -s -vv --pyargs pyslabs
 
 test-all: ## run tests on every Python version with tox
 	tox

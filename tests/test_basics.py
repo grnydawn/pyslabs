@@ -10,9 +10,6 @@ NPROCS = 3
 NSIZE = 10
 NITER = 5
 
-def f(x):
-    return x*x
-
 def writelist(myid):
 
     slabs = pyslabs.parallel_open(slabfile, mode="w")
@@ -20,7 +17,7 @@ def writelist(myid):
 
     for i in range(NITER):
         mylist = [(myid, i)]*NSIZE
-        testvar.write(mylist, myid*NSIZE)
+        testvar.write(mylist, (myid*NSIZE, 0), shape=(NSIZE, 2))
 
     slabs.close()
 
@@ -30,23 +27,31 @@ def test_serial():
     if os.path.isdir(workdir):
         shutil.rmtree(workdir)
 
+    if os.path.isfile(slabfile):
+        os.remove(slabfile)
+
+
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="w")
 
-    testvar = slabs.define_var("test")
+    testvar = slabs.define_var("test", shape=(True, 10, 2))
 
     for i in range(NITER):
         mylist = [(0, i)]*NSIZE
-        testvar.write(mylist, 0)
+        testvar.write(mylist, (0, 0), shape=(10, 2))
 
     slabs.close()
 
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
     data = slabs.get_array("test")
+
     slabs.close()
 
     assert len(data) == NITER
     assert all([len(slab)==NSIZE for slab in data])
+    assert all([len(slab)==2 for slab in data[0]])
     assert all([sum(slab[1])==i for i, slab in enumerate(data)])
+
+    os.remove(slabfile)
 
 
 def test_multiprocessing():
@@ -54,6 +59,9 @@ def test_multiprocessing():
 
     if os.path.isdir(workdir):
         shutil.rmtree(workdir)
+
+    if os.path.isfile(slabfile):
+        os.remove(slabfile)
 
     slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
 
@@ -64,13 +72,13 @@ def test_multiprocessing():
         p.start()
         procs.append(p)
 
-    testvar = slabs.define_var("test")
+    testvar = slabs.define_var("test", shape=(NITER, NSIZE*NPROCS, 2))
 
     slabs.begin()
 
     for i in range(NITER):
         mylist = [(0, i)]*NSIZE
-        testvar.write(mylist, 0)
+        testvar.write(mylist, (0, 0), shape=(NSIZE, 2))
 
     for i in range(NPROCS-1):
         procs[i].join()
@@ -84,5 +92,7 @@ def test_multiprocessing():
 
     assert len(data) == NITER
     assert all([len(slab)==NSIZE*NPROCS for slab in data])
+    assert all([len(slab)==2 for slab in data[0]])
     assert data[NITER-1][NSIZE*NPROCS-1] == (NPROCS-1, NITER-1)
 
+    os.remove(slabfile)
