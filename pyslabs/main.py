@@ -60,10 +60,37 @@ class VariableWriter():
 
 class VariableReader():
 
-    def __init__(self, path, config):
+    def __init__(self, slabobj, config):
 
-        self.path = path
+        self.slabobj = slabobj
         self.config = config
+
+    def __len__(self):
+        import pdb; pdb.set_trace()
+
+    def __getitem__(self, key):
+        import pdb; pdb.set_trace()
+
+    def __setitem__(self, key, value):
+        import pdb; pdb.set_trace()
+
+    def __delitem__(self, key):
+        import pdb; pdb.set_trace()
+
+    def __missing__(self, key):
+        import pdb; pdb.set_trace()
+
+    def __iter__(self):
+        import pdb; pdb.set_trace()
+
+    def __next__(self):
+        import pdb; pdb.set_trace()
+
+    def __reversed__(self):
+        import pdb; pdb.set_trace()
+
+    def __contains__(self, item):
+        import pdb; pdb.set_trace()
 
 
 class ParallelPyslabsWriter():
@@ -263,28 +290,56 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
         # TODO: coordinate with slaves removing output paths
 
 
+# TODO: do not create workdir just use tarfile object
+
 class ParallelPyslabsReader():
 
-    def __init__(self, workdir, config):
-        self.root = workdir
-        self.cfgpath = os.path.join(self.root, _CONFIG_FILE)
-        self.config = config
-        self.slabpath = config["__control__"]["slabpath"]
+    def __init__(self, slabpath):
+        self.slabpath = slabpath
+        self.slabarc = tarfile.open(slabpath)
+        self.slabmap = {}
 
-    def get_array(self, name, squeeze=False):
+        for entry in self.slabarc:
+            if entry.name == _CONFIG_FILE:
+                self.config = pickle.load(self.slabarc.extractfile(entry))
+
+            self._trie(self.slabmap, entry.path.split("/"), entry)
+
+    def _trie(self, pmap, path, entry):
+
+        if len(path) == 1:
+
+            if path[0] in pmap:
+                raise Exception("Wrong mapping: %s" % path)
+
+            pmap[path[0]] = entry
+
+        elif path[0] in pmap and isinstance(pmap[path[0]], dict):
+            self._trie(pmap[path[0]], path[1:], entry)
+
+        else:
+            newmap = {}
+            pmap[path[0]] = newmap
+            self._trie(newmap, path[1:], entry)
+
+    def __del__(self):
+        self.slabarc.close()
+
+    def get_var(self, name, squeeze=False):
 
         varcfg = self.config["vars"][name]
 
-        var = VariableReader(os.path.join(self.root, name), varcfg)
+        return VariableReader(self.slabarc, self.slabmap[name], varcfg)
 
-        return data.get_array(var, squeeze)
+    def get_array(self, name, squeeze=False):
+
+        return data.get_array(self.slabarc, self.slabmap[name], squeeze)
 
     def close(self):
         pass
 
     def __enter__(self):
         return self
-
 
     def __exit__(self, type, value, traceback):
         pass
@@ -292,12 +347,9 @@ class ParallelPyslabsReader():
 
 class MasterPyslabsReader(ParallelPyslabsReader):
 
-    def __init__(self, workdir, config):
+    def __init__(self, slabpath):
 
-        super(MasterPyslabsReader, self).__init__(workdir, config)
-
-        with tarfile.open(self.slabpath, "r") as tar:
-            tar.extractall(self.root)
+        super(MasterPyslabsReader, self).__init__(slabpath)
 
     def __enter__(self):
         return self
@@ -305,37 +357,31 @@ class MasterPyslabsReader(ParallelPyslabsReader):
     def __exit__(self, exc_type, exc_value, traceback):
         return self.close()
 
-    def close(self):
-
-        if os.path.isdir(self.root):
-            shutil.rmtree(self.root)
-
 
 def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
-
-    if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
-        base, ext = os.path.splitext(slabpath)
-        beginpath = base + _BEGIN_EXT
-
-        if workdir is None:
-            workdir = base + _WORKDIR_EXT
-    else:
-        beginpath = slabpath + _BEGIN_EXT
-        if workdir is None:
-            workdir = slabpath + _WORKDIR_EXT
-        slabpath += _EXT
-
-    # create root directory
-    os.makedirs(workdir, exist_ok=True)
-    for item in os.listdir(workdir):
-        itempath = os.path.join(workdir, item)
-
-        if os.path.isdir(itempath):
-            shutil.rmtree(itempath)
-        else:
-            os.remove(itempath)
-
+ 
     if mode == "w":
+        if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
+            base, ext = os.path.splitext(slabpath)
+            beginpath = base + _BEGIN_EXT
+
+            if workdir is None:
+                workdir = base + _WORKDIR_EXT
+        else:
+            beginpath = slabpath + _BEGIN_EXT
+            if workdir is None:
+                workdir = slabpath + _WORKDIR_EXT
+            slabpath += _EXT
+
+        # create root directory
+        os.makedirs(workdir, exist_ok=True)
+        for item in os.listdir(workdir):
+            itempath = os.path.join(workdir, item)
+
+            if os.path.isdir(itempath):
+                shutil.rmtree(itempath)
+            else:
+                os.remove(itempath)
 
         # create a config file
         with io.open(beginpath, "wb") as fp:
@@ -347,20 +393,20 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
         if not os.path.isfile(beginpath):
             raise Exception("Can not create a flag file: %s" % beginpath)
 
-    if not os.path.isdir(workdir):
-        raise Exception("Work directory does not exist: %s" % workdir)
+        if not os.path.isdir(workdir):
+            raise Exception("Work directory does not exist: %s" % workdir)
 
-    cfg = _CONFIG_INIT
-    cfg["__control__"]["nprocs"] = nprocs
-    cfg["__control__"]["archive"] = archive
-    cfg["__control__"]["beginpath"] = beginpath
-    cfg["__control__"]["slabpath"] = slabpath
+        cfg = _CONFIG_INIT
+        cfg["__control__"]["nprocs"] = nprocs
+        cfg["__control__"]["archive"] = archive
+        cfg["__control__"]["beginpath"] = beginpath
+        cfg["__control__"]["slabpath"] = slabpath
 
-    if mode[0] == "w":
         return MasterPyslabsWriter(workdir, cfg)
 
     elif mode[0] == "r":
-        return MasterPyslabsReader(workdir, cfg)
+
+        return MasterPyslabsReader(slabpath)
 
     else:
         raise Exception("Unknown open mode: %s" % str(mode))
@@ -368,45 +414,41 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
 
 def parallel_open(slabpath, mode="r"):
  
-    if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
+    if mode == "w":
         base, ext = os.path.splitext(slabpath)
-        beginpath = base + _BEGIN_EXT
+        beginpath = (base if ext else slabpath) + _BEGIN_EXT
+
+        start = time.time()
+        while time.time() - start < _MAX_OPEN_WAIT:
+            if os.path.isfile(beginpath):
+                with io.open(beginpath, "rb") as fp:
+                    begin = pickle.load(fp)
+                    workdir = begin["workdir"]
+                break
+            time.sleep(0.1)
+
+        if workdir is None:
+            raise Exception("No begin notification: %s" % beginpath)
+     
+        start = time.time()
+        while time.time() - start < _MAX_OPEN_WAIT:
+
+            cfgpath = os.path.join(workdir, _CONFIG_FILE)
+
+            if not os.path.isfile(cfgpath):
+                time.sleep(0.1)
+                continue
+
+            with io.open(cfgpath, "rb") as fp:
+                cfg = pickle.load(fp)
+
+            return ParallelPyslabsWriter(workdir, cfg)
+
+    elif mode[0] == "r":
+        return ParallelPyslabsReader(slabpath)
 
     else:
-        beginpath = slabpath + _BEGIN_EXT
-
-    start = time.time()
-    while time.time() - start < _MAX_OPEN_WAIT:
-        if os.path.isfile(beginpath):
-            with io.open(beginpath, "rb") as fp:
-                begin = pickle.load(fp)
-                workdir = begin["workdir"]
-            break
-        time.sleep(0.1)
-
-    if workdir is None:
-        raise Exception("No begin notification: %s" % beginpath)
- 
-    start = time.time()
-    while time.time() - start < _MAX_OPEN_WAIT:
-
-        cfgpath = os.path.join(workdir, _CONFIG_FILE)
-
-        if not os.path.isfile(cfgpath):
-            time.sleep(0.1)
-            continue
-
-        with io.open(cfgpath, "rb") as fp:
-            cfg = pickle.load(fp)
-
-            if mode[0] == "w":
-                return ParallelPyslabsWriter(workdir, cfg)
-
-            elif mode[0] == "r":
-                return ParallelPyslabsReader(workdir, cfg)
-
-            else:
-                raise Exception("Unknown open mode: %s" % str(mode))
+        raise Exception("Unknown open mode: %s" % str(mode))
 
     raise Exception("Target configuration is not configured: %s" % cfgpath)
 

@@ -1,10 +1,17 @@
-import os, pickle
+import os, pickle, resource
 import pyslabs.data_numpy as dnp
+from collections import OrderedDict
+from tarfile import TarInfo
 
 _supported_arrays = {
     "numpy": (lambda a: (type(a).__name__=="ndarray" and
                         type(a).__module__== "numpy"), "npy")
 }
+
+_cache = OrderedDict()
+
+def _evict(num_items=1):
+    _cache.popitem(last=False)
 
 
 def arraytype(slab):
@@ -74,19 +81,28 @@ def stack(arrays, atype):
         return arrays
 
 
-def load(file, atype):
+def load(tfile, slabobj, atype):
+
+    path = slabobj.path
+
+    if path in _cache:
+        return _cache[path]
+
+    # TODO: add caching evict logic
+    # usage = resource.getrusage().ru_maxrss
+
+    file = tfile.extractfile(slabobj)
 
     if atype == "numpy":
-        return (atype, dnp.load(file))
+        _d = (atype, dnp.load(file))
+        _cache[path] = _d
+        return _d
 
-    try:
-        slab = pickle.load(file)
+    slab = pickle.load(file)
 
-    except Exception as err:
-        with open(file, "rb") as fp:
-            slab = pickle.load(fp)
-
-    return ("pickle", slab)
+    _d = ("pickle", slab)
+    _cache[path] = _d
+    return _d
 
 
 def shape(slab):
@@ -167,33 +183,33 @@ def _concat(bucket, array):
         bucket[1][i] = bucket[1][i] + item
 
 
-def _merge(path):
+def _merge(tfile, slabobj):
 
     _d = []
     _f = []
     _atype = None
 
-    for item in sorted(os.listdir(path)):
-        _p = os.path.join(path, item)
+    for key in sorted(slabobj):
+        item = slabobj[key]
 
-        if os.path.isdir(_p):
-            _d.append(_merge(_p))
+        if isinstance(item, dict):
+            _d.append(_merge(tfile, item))
 
-        elif os.path.isfile(_p):
-            _, atype, _ = item.split(".")
+        elif isinstance(item, TarInfo):
+            _, atype, _ = os.path.basename(item.path).split(".")
 
             if _atype is None:
                 _atype = atype
-                _f.append(load(_p, atype)[1])
+                _f.append(load(tfile, item, atype)[1])
 
             elif _atype != atype:
                 raise Exception("Different type exists in a stack: %s != %s" % (_atype, atype))
 
             else:
-                _f.append(load(_p, atype)[1])
+                _f.append(load(tfile, item, atype)[1])
             
         else:
-            raise Exception("Unknown file type: %s" % _p)
+            raise Exception("Unknown file type: %s" % str(item))
 
     if _f:
         _m = [_atype, stack(tuple(_f), _atype)]
@@ -207,9 +223,9 @@ def _merge(path):
     return _m
 
 
-def get_array(var, _squeeze):
+def get_array(tfile, slabobj, _squeeze):
 
-    stype, arr = _merge(var.path)
+    stype, arr = _merge(tfile, slabobj)
 
     if _squeeze and length(arr, 0) == 1:
         arr = squeeze(arr)

@@ -1,4 +1,5 @@
 import numpy as np
+from io import BytesIO
 
 def dump(slab, file):
     return np.save(file, slab)
@@ -13,7 +14,10 @@ def stack(arrays):
 
 
 def load(file):
-    return np.load(file)
+    bytes = BytesIO()
+    bytes.write(file.read())
+    bytes.seek(0)
+    return np.load(bytes)
 
 
 def shape(slab):
