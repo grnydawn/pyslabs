@@ -14,10 +14,9 @@ pyslabs is a pure Python parallel I/O module.
 Features
 ----------
 
-* Create arrays with any pickle-able objects.
+* Create arrays with pickle-able objects.
 * Create arrays with famous data formats such as Numpy.
 * Support serial, multiprocessing, and MPI programming.
-* Generate data files quickly using task-local files.
 * Read only the parts of an array per requests(under development).
 * Unload parts of an array to reduce main memory usage(under development).
 

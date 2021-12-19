@@ -70,7 +70,11 @@ def stack(arrays, atype):
         import numpy as np
         return np.stack(arrays)
 
-    return type(arrays[0])(arrays)
+    try:
+        return type(arrays[0])(arrays)
+
+    except TypeError:
+        return arrays
 
 
 def load(file, atype):
@@ -201,7 +205,7 @@ def _merge(path):
             raise Exception("Unknown file type: %s" % _p)
 
     if _f:
-        _m = [_atype, stack(_f, _atype)]
+        _m = [_atype, stack(tuple(_f), _atype)]
 
     else:
         _m = [None, None]

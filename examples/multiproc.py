@@ -48,5 +48,8 @@ def main():
     print(type(data))
     print(data)
 
+    os.remove(slabfile)
+
+
 if __name__ == "__main__":
     main()
