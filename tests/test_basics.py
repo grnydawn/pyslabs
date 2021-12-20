@@ -13,7 +13,7 @@ NITER = 5
 def writelist(myid):
 
     slabs = pyslabs.parallel_open(slabfile, mode="w")
-    testvar = slabs.get_var("test")
+    testvar = slabs.get_writer("test")
 
     for i in range(NITER):
         mylist = [(myid, i)]*NSIZE
@@ -33,7 +33,7 @@ def test_serial():
 
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="w")
 
-    testvar = slabs.define_var("test", shape=(True, 10, 2))
+    testvar = slabs.get_writer("test", shape=(True, 10, 2))
 
     for i in range(NITER):
         mylist = [(0, i)]*NSIZE
@@ -72,7 +72,7 @@ def test_multiprocessing():
         p.start()
         procs.append(p)
 
-    testvar = slabs.define_var("test", shape=(NITER, NSIZE*NPROCS, 2))
+    testvar = slabs.get_writer("test", shape=(NITER, NSIZE*NPROCS, 2))
 
     slabs.begin()
 
@@ -86,7 +86,10 @@ def test_multiprocessing():
     slabs.close()
 
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
+    var = slabs.get_reader("test")
     data = slabs.get_array("test")
+
+    var2 = var[1,:,:]
 
     slabs.close()
 

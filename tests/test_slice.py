@@ -16,7 +16,7 @@ def f(x):
 def writelist(myid):
 
     slabs = pyslabs.parallel_open(slabfile, mode="w")
-    testvar = slabs.get_var("test")
+    testvar = slabs.get_writer("test")
 
     for i in range(NITER):
         mylist = [(myid, i)]*NSIZE
@@ -37,14 +37,14 @@ def test_list():
     data1 = [4,5,6]
 
     with pyslabs.open(slabfile, "w") as slabs:
-        myvar = slabs.define_var("myvar")
+        myvar = slabs.get_writer("myvar")
         myvar.write(data0)
         myvar.write(data1)
 
     assert os.path.isfile(slabfile)
 
     with pyslabs.open(slabfile, "r") as slabs:
-        myvar = slabs.get_var("myvar")
+        myvar = slabs.get_reader("myvar")
 
     assert myvar.ndim == 2
     assert myvar.shape == (2, 3)

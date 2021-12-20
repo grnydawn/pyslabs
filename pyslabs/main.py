@@ -116,6 +116,7 @@ class VariableReader():
 
     def __getitem__(self, key):
         # TODO: handle slabobj level here and ask data the rest
+        import pdb; pdb.set_trace()
         pass
 
     def __setitem__(self, key, value):
@@ -140,7 +141,7 @@ class VariableReader():
         import pdb; pdb.set_trace()
 
 
-class ParallelPyslabsWriter():
+class PyslabsWriter():
 
     def __init__(self, root, config):
         self.root = root
@@ -150,12 +151,6 @@ class ParallelPyslabsWriter():
         self.config = config
 
         os.makedirs(self.path)
-
-    def get_var(self, name):
-
-        varcfg = self.config["vars"][name]
-
-        return VariableWriter(os.path.join(self.path, name), varcfg)
 
     def close(self):
 
@@ -171,8 +166,16 @@ class ParallelPyslabsWriter():
                 os.fsync(fp.fileno())
 
 
+class ParallelPyslabsWriter(PyslabsWriter):
 
-class MasterPyslabsWriter(ParallelPyslabsWriter):
+    def get_writer(self, name):
+
+        varcfg = self.config["vars"][name]
+
+        return VariableWriter(os.path.join(self.path, name), varcfg)
+
+
+class MasterPyslabsWriter(PyslabsWriter):
 
     def __enter__(self):
         return self
@@ -217,7 +220,7 @@ class MasterPyslabsWriter(ParallelPyslabsWriter):
             raise Exception("Number of processes mismatch: %d != %d" %
                     (len(procs), nprocs))
 
-    def define_var(self, name, shape=None):
+    def get_writer(self, name, shape=None):
 
         varcfg = copy.deepcopy(_VARCFG_INIT)
 
@@ -435,7 +438,7 @@ class ParallelPyslabsReader():
     def __del__(self):
         self.slabarc.close()
 
-    def get_var(self, name, squeeze=False):
+    def get_reader(self, name, squeeze=False):
 
         varcfg = self.config["vars"][name]
 

@@ -143,10 +143,10 @@ class LocalDomain():
 
         self.slabs = pyslabs.master_open(outfile, workdir=workdir, mode="w")
 
-        self.dens_writer = self.slabs.define_var("dens")
-        self.umom_writer = self.slabs.define_var("umom")
-        self.wmom_writer = self.slabs.define_var("wmom")
-        self.rhot_writer = self.slabs.define_var("rhot")
+        self.dens_writer = self.slabs.get_writer("dens")
+        self.umom_writer = self.slabs.get_writer("umom")
+        self.wmom_writer = self.slabs.get_writer("wmom")
+        self.rhot_writer = self.slabs.get_writer("rhot")
 
     def set_halo_values_z(self, state):
 

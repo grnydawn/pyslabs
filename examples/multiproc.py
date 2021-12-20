@@ -14,7 +14,7 @@ def func(myid):
 
     slabs = pyslabs.parallel_open(slabfile, mode="w")
 
-    testvar = slabs.get_var("test")
+    testvar = slabs.get_writer("test")
 
     # arguments: (array, starting index)
     testvar.write(numpy.ones(NELEMS)*myid, myid*NELEMS)
@@ -27,7 +27,7 @@ def main():
     # for master process
     slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
 
-    testvar = slabs.define_var("test")
+    testvar = slabs.get_writer("test")
 
     for i in range(NPROCS-1):
         p = Process(target=func, args=(i,))

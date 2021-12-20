@@ -15,7 +15,7 @@ def f2():
 def main():
 
     with pyslabs.open(slabfile, "w") as slabs:
-        testvar = slabs.define_var("test")
+        testvar = slabs.get_writer("test")
         testvar.write(f1)
         testvar.write(f2)
 
