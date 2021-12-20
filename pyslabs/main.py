@@ -97,6 +97,9 @@ class VariableWriter():
         self.writecount += 1
 
 
+# TODO: add slab-level services
+# TODO: add slice to array
+
 class VariableReader():
 
     def __init__(self, tfile, slabmap, config, start=None, shape=None):
@@ -119,23 +122,11 @@ class VariableReader():
         import pdb; pdb.set_trace()
         pass
 
-    def __setitem__(self, key, value):
-        raise NotImplementedError()
-
-    def __delitem__(self, key):
-        raise NotImplementedError()
-
-    def __missing__(self, key):
-        import pdb; pdb.set_trace()
-
     def __iter__(self):
         import pdb; pdb.set_trace()
 
     def __next__(self):
         import pdb; pdb.set_trace()
-
-    def __reversed__(self):
-        raise NotImplementedError()
 
     def __contains__(self, item):
         import pdb; pdb.set_trace()
@@ -400,10 +391,6 @@ class MasterPyslabsWriter(PyslabsWriter):
 
             shutil.rmtree(self.root)
 
-        # TODO: coordinate with slaves removing output paths
-
-
-# TODO: do not create workdir just use tarfile object
 
 class ParallelPyslabsReader():
 
