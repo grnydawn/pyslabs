@@ -99,28 +99,30 @@ class VariableWriter():
 
 class VariableReader():
 
-    def __init__(self, tfile, slabmap, config):
+    def __init__(self, tfile, slabmap, config, start=None, shape=None):
 
         self._tfile = tfile
         self._slabmap = slabmap
         self._config = config
-        self.shape = tuple(self._config["shape"])
+        self.shape = shape if shape else tuple(self._config["shape"])
+        self._start = start if start else tuple([0]*len(self.shape))
 
     @property
     def ndim(self):
         return len(self.shape)
 
     def __len__(self):
-        import pdb; pdb.set_trace()
+        return self.shape[0]
 
     def __getitem__(self, key):
-        import pdb; pdb.set_trace()
+        # TODO: handle slabobj level here and ask data the rest
+        pass
 
     def __setitem__(self, key, value):
-        import pdb; pdb.set_trace()
+        raise NotImplementedError()
 
     def __delitem__(self, key):
-        import pdb; pdb.set_trace()
+        raise NotImplementedError()
 
     def __missing__(self, key):
         import pdb; pdb.set_trace()
@@ -132,7 +134,7 @@ class VariableReader():
         import pdb; pdb.set_trace()
 
     def __reversed__(self):
-        import pdb; pdb.set_trace()
+        raise NotImplementedError()
 
     def __contains__(self, item):
         import pdb; pdb.set_trace()
