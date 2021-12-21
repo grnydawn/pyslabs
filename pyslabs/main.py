@@ -1,5 +1,5 @@
-import os, io, pickle, shutil, time, uuid, tarfile, copy
-
+import os, io, pickle, shutil, time, uuid, tarfile, copy, itertools
+from collections import OrderedDict
 from pyslabs import data
 
 
@@ -99,16 +99,17 @@ class VariableWriter():
 
 # TODO: add slab-level services
 # TODO: add slice to array
+# TODO: use buffer for tarfile
 
 class VariableReader():
 
-    def __init__(self, tfile, slabmap, config, start=None, shape=None):
+    def __init__(self, tfile, slabtower, config, start=None, shape=None):
 
         self._tfile = tfile
-        self._slabmap = slabmap
+        self._slabtower = slabtower
         self._config = config
         self.shape = shape if shape else tuple(self._config["shape"])
-        self._start = start if start else tuple([0]*len(self.shape))
+        #self._start = start if start else tuple([0]*len(self.shape))
 
     @property
     def ndim(self):
@@ -117,10 +118,139 @@ class VariableReader():
     def __len__(self):
         return self.shape[0]
 
+    def _get_slice(self, key, length):
+
+        if isinstance(key, int):
+            start, stop, step = key, key+1, 1
+
+        else:
+            start, stop, step = key.start, key.stop, key.step
+
+        if start is None:
+            start = 0
+
+        if stop is None:
+            stop = length
+
+        if step is None:
+            step = 1
+
+        return slice(start, stop, step)
+
+    def _merge_stack(self, tower, tkey, shape, newkey):
+
+        _k = self._get_slice(tkey, shape[0])
+
+        _m = []
+        atype = None
+
+        for name, tinfo in itertools.islice(tower.items(),
+                _k.start, _k.stop, _k.step):
+
+            _, _atype, _ = name.split(".")
+
+            if atype is None:
+                atype = _atype
+
+            elif atype != _atype:
+                raise Exception("Array type mismatch: %s != %s" % (str(atype), str(_atype)))
+
+            _, slab = data.load(self._tfile, tinfo, atype)
+
+            slab = data.get_slice(slab, atype, newkey)
+
+            _m.append(slab)
+
+        _a = data.stack(_m, atype)
+        if len(_a) == 1:
+            _a = _a[0]
+
+        return (atype, _a)
+
+    def _get_array(self, tower, key, tkey, shape, newkey=None):
+
+        # create a new list for processing at this level
+        newkey = list() if newkey is None else list(newkey)
+
+        if len(key) == 0:
+            return self._merge_stack(tower, tkey, shape, newkey)
+
+        _k = self._get_slice(key[0], shape[0])
+
+        _m = []
+
+        # next indices
+        nidxes = list(tower.keys())[1:] + [shape[0]]
+
+        tlen = 0 # total length
+        slen = 0 # slice length
+        atype = None
+
+        for (idx, val), nidx in zip(tower.items(), nidxes):
+
+            idx = int(idx)
+
+            if nidx <= _k.start:
+                continue
+
+            if idx >= _k.stop:
+                break
+
+            if slen == 0:
+                a = _k.start - tlen
+                slen = nidx - _k.start
+
+            else:
+                a = (_k.step - slen % step) % _k.step
+                slen += nidx - idx
+
+            if nidx >= _k.stop:
+                b = _k.stop - tlen
+
+            else:
+                b = nidx - idx
+
+            newkey.append(slice(a, b, _k.step))
+
+            _atype, _o = self._get_array(val, key[1:], tkey, shape[1:], newkey)
+
+            if atype is None:
+                atype = _atype
+
+            elif atype != _atype:
+                raise Exception("Array type mismatch: %s != %s" % (str(atype), str(_atype)))
+
+            _m.append(_o)
+
+            tlen += nidx - idx
+
+        _x = [None, None]
+
+        for _i in _m:
+            data._concat(_x, (atype, _i))
+
+        if data.length(_x[1], 0) == 1:
+            _x = data.squeeze(_x[1])
+
+        return _x
+
     def __getitem__(self, key):
-        # TODO: handle slabobj level here and ask data the rest
-        import pdb; pdb.set_trace()
-        pass
+
+        ndim = self.ndim
+
+        if isinstance(key, int):
+            key = (key,) + (slice(None, None, None),) * (ndim-1)
+
+        elif len(key) < ndim:
+            key = key + (slice(None, None, None),) * (ndim-len(key))
+
+        # put stack dimension at the last
+        shape = list(self.shape)
+        shape = shape[1:] + [shape[0]]
+
+        atype, array = self._get_array(self._slabtower, key[1:], key[0], shape)
+
+        return array
 
     def __iter__(self):
         import pdb; pdb.set_trace()
@@ -396,44 +526,61 @@ class ParallelPyslabsReader():
 
     def __init__(self, slabpath):
         self.slabpath = slabpath
-        self.slabarc = tarfile.open(slabpath)
-        self.slabmap = {}
+        self.slabarchive = tarfile.open(slabpath)
+        self.slabtower = OrderedDict()
 
-        for entry in self.slabarc:
+        _tower = {}
+
+        for entry in self.slabarchive:
             if entry.name == _CONFIG_FILE:
-                self.config = pickle.load(self.slabarc.extractfile(entry))
+                self.config = pickle.load(self.slabarchive.extractfile(entry))
+            else:
+                self._trie(_tower, entry.path.split("/"), entry)
 
-            self._trie(self.slabmap, entry.path.split("/"), entry)
+        self._sort_tower(self.slabtower, _tower)
 
-    def _trie(self, pmap, path, entry):
+    def _sort_tower(self, st, t):
+
+        for k in sorted(t.keys()):
+            v = t[k]
+
+            if isinstance(v, dict):
+                _st = OrderedDict()
+                st[k] = _st
+                self._sort_tower(_st, v)
+
+            else:
+                st[k] = v
+
+    def _trie(self, tower, path, entry):
 
         if len(path) == 1:
 
-            if path[0] in pmap:
+            if path[0] in tower:
                 raise Exception("Wrong mapping: %s" % path)
 
-            pmap[path[0]] = entry
+            tower[path[0]] = entry
 
-        elif path[0] in pmap and isinstance(pmap[path[0]], dict):
-            self._trie(pmap[path[0]], path[1:], entry)
+        elif path[0] in tower and isinstance(tower[path[0]], dict):
+            self._trie(tower[path[0]], path[1:], entry)
 
         else:
-            newmap = {}
-            pmap[path[0]] = newmap
-            self._trie(newmap, path[1:], entry)
+            _t = {}
+            tower[path[0]] = _t
+            self._trie(_t, path[1:], entry)
 
     def __del__(self):
-        self.slabarc.close()
+        self.slabarchive.close()
 
     def get_reader(self, name, squeeze=False):
 
         varcfg = self.config["vars"][name]
 
-        return VariableReader(self.slabarc, self.slabmap[name], varcfg)
+        return VariableReader(self.slabarchive, self.slabtower[name], varcfg)
 
     def get_array(self, name, squeeze=False):
 
-        return data.get_array(self.slabarc, self.slabmap[name], squeeze)
+        return data.get_array(self.slabarchive, self.slabtower[name], squeeze)
 
     def close(self):
         pass

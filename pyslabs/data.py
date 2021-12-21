@@ -1,4 +1,4 @@
-import os, pickle, resource
+import os, pickle, resource, itertools
 import pyslabs.data_numpy as dnp
 from collections import OrderedDict
 from tarfile import TarInfo
@@ -79,6 +79,32 @@ def stack(arrays, atype):
 
     except TypeError:
         return arrays
+
+
+def _get_slice(slab, key):
+    
+    if not key:
+        return slab
+
+    start, stop, step = key[0].start, key[0].stop, key[0].step
+
+    _m = []
+
+    for item in itertools.islice(slab, start, stop, step):
+        _m.append(_get_slice(item, key[1:]))
+
+    return _m
+
+
+def get_slice(slab, atype, key):
+
+    if not slab:
+        return slab
+
+    if atype == "numpy":
+        return dnp.get_slice(slab)
+
+    return _get_slice(slab, key)   
 
 
 def load(tfile, slabobj, atype):
