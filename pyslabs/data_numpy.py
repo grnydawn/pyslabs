@@ -35,3 +35,7 @@ def length(slab, axis):
 
 def squeeze(slab):
     return np.squeeze(slab, axis=0)
+
+
+def get_slice(slab, key):
+    return slab.__getitem__(tuple(key))

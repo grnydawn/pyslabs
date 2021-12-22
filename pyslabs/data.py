@@ -41,29 +41,29 @@ def dump(slab, file):
             os.fsync(fp.fileno())
 
 
-def concat(arrays, atype):
-
-    if not arrays:
-        return arrays
-
-    if atype == "numpy":
-        return dnp.concat(arrays, axis=0)
-
-    try:
-        output = arrays[0]
-        for item in arrays[1:]:
-            output += item
-
-    except TypeError:
-        output = arrays[0]
-        for item in arrays[1:]:
-            if isinstance(output, dict):
-                output.update(item)
-            else:
-                raise Exception("Not supported type for concatenation: %s" %
-                                str(type(output)))
-
-    return output
+#def ccconcat(arrays, atype):
+#
+#    if not arrays:
+#        return arrays
+#
+#    if atype == "numpy":
+#        return dnp.concat(arrays, axis=0)
+#
+#    try:
+#        output = arrays[0]
+#        for item in arrays[1:]:
+#            output += item
+#
+#    except TypeError:
+#        output = arrays[0]
+#        for item in arrays[1:]:
+#            if isinstance(output, dict):
+#                output.update(item)
+#            else:
+#                raise Exception("Not supported type for concatenation: %s" %
+#                                str(type(output)))
+#
+#    return output
 
 
 def stack(arrays, atype):
@@ -88,21 +88,29 @@ def _get_slice(slab, key):
 
     start, stop, step = key[0].start, key[0].stop, key[0].step
 
+    _stype = type(slab)
     _m = []
 
     for item in itertools.islice(slab, start, stop, step):
         _m.append(_get_slice(item, key[1:]))
+
+    if _m:
+        try:
+            _m = _stype(_m)
+
+        except TypeError:
+            pass
 
     return _m
 
 
 def get_slice(slab, atype, key):
 
-    if not slab:
+    if slab is None:
         return slab
 
     if atype == "numpy":
-        return dnp.get_slice(slab)
+        return dnp.get_slice(slab, key)
 
     return _get_slice(slab, key)   
 
@@ -171,9 +179,7 @@ def length(slab, dim):
     return _s[dim]
 
 
-def squeeze(slab):
-
-    atype, ext = arraytype(slab)
+def squeeze(slab, atype):
 
     if atype == "numpy":
         return dnp.squeeze(slab)
@@ -206,7 +212,7 @@ def _concat(bucket, array):
     bucket[0] = atype
 
     for i, item in enumerate(array[1]):
-        bucket[1][i] = bucket[1][i] + item
+        bucket[1][i] = bucket[1][i] + array[1][i]
 
 
 def _merge(tfile, slabobj):
@@ -238,7 +244,7 @@ def _merge(tfile, slabobj):
             raise Exception("Unknown file type: %s" % str(item))
 
     if _f:
-        _m = [_atype, stack(tuple(_f), _atype)]
+        _m = [_atype, stack(_f, atype)]
 
     else:
         _m = [None, None]
@@ -246,14 +252,20 @@ def _merge(tfile, slabobj):
     for _i in _d:
         _concat(_m, _i)
         
-    return _m
+    if _m:
+        try:
+            _m[1] = type(_m[1][0])(_m[1])
 
+        except TypeError:
+            pass
+
+    return _m
 
 def get_array(tfile, slabobj, _squeeze):
 
     stype, arr = _merge(tfile, slabobj)
 
     if _squeeze and length(arr, 0) == 1:
-        arr = squeeze(arr)
+        arr = squeeze(arr, stype)
 
     return arr

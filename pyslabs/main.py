@@ -1,4 +1,4 @@
-import os, io, pickle, shutil, time, uuid, tarfile, copy, itertools
+import os, io, pickle, shutil, time, uuid, tarfile, copy, itertools, pprint
 from collections import OrderedDict
 from pyslabs import data
 
@@ -51,6 +51,12 @@ class VariableWriter():
         if start is None:
             start = (0,) * len(slabshape)
 
+        elif isinstance(start, int):
+            start = (start,) + (0,) * (len(slabshape) - 1)
+
+        else:
+            start = start + (0,) * (len(slabshape) - len(start))
+
         # generate shape
         if self.config["shape"] is None:
             self.config["shape"] = [1] + list(slabshape)
@@ -66,12 +72,8 @@ class VariableWriter():
 
         slabpath = []
 
-        try:
-            for _s in start:
-                slabpath.append(str(_s))
-
-        except TypeError:
-            slabpath.append(str(start))
+        for _s in start:
+            slabpath.append(str(_s))
 
         wc = str(self.writecount)
         
@@ -118,24 +120,31 @@ class VariableReader():
     def __len__(self):
         return self.shape[0]
 
-    def _get_slice(self, key, length):
+    # TODO: generate a list of indexes and find out start stop
 
-        if isinstance(key, int):
-            start, stop, step = key, key+1, 1
+    def _get_slice(self, k, length):
+
+        if isinstance(k, int):
+            if k < 0:
+                start, stop, step = length+k, length+k+1, 1
+
+            else:
+                start, stop, step = k, k+1, 1
 
         else:
-            start, stop, step = key.start, key.stop, key.step
+            start, stop, step = k.start or 0, k.stop or length, k.step or 1
 
-        if start is None:
-            start = 0
+        minval = length
+        maxval = 0
 
-        if stop is None:
-            stop = length
+        for i in range(start, stop, step):
+            if i < minval:
+                minval = i
 
-        if step is None:
-            step = 1
+            if i > maxval:
+                maxval = i
 
-        return slice(start, stop, step)
+        return slice(minval, maxval + 1, step)
 
     def _merge_stack(self, tower, tkey, shape, newkey):
 
@@ -162,8 +171,8 @@ class VariableReader():
             _m.append(slab)
 
         _a = data.stack(_m, atype)
-        if len(_a) == 1:
-            _a = _a[0]
+        #if len(_a) == 1:
+        #    _a = _a[0]
 
         return (atype, _a)
 
@@ -189,8 +198,10 @@ class VariableReader():
         for (idx, val), nidx in zip(tower.items(), nidxes):
 
             idx = int(idx)
+            nidx = int(nidx)
 
             if nidx <= _k.start:
+                tlen += nidx - idx
                 continue
 
             if idx >= _k.stop:
@@ -201,7 +212,7 @@ class VariableReader():
                 slen = nidx - _k.start
 
             else:
-                a = (_k.step - slen % step) % _k.step
+                a = (_k.step - slen % _k.step) % _k.step
                 slen += nidx - idx
 
             if nidx >= _k.stop:
@@ -210,27 +221,27 @@ class VariableReader():
             else:
                 b = nidx - idx
 
-            newkey.append(slice(a, b, _k.step))
+            #newkey.append(slice(a, b, _k.step))
+            _nk = newkey + [slice(a, b, _k.step)]
 
-            _atype, _o = self._get_array(val, key[1:], tkey, shape[1:], newkey)
+            #_atype, _o = self._get_array(val, key[1:], tkey, shape[1:], newkey)
+            _atype, _o = self._get_array(val, key[1:], tkey, shape[1:], _nk)
 
-            if atype is None:
-                atype = _atype
+            if _o:
+                if atype is None:
+                    atype = _atype
 
-            elif atype != _atype:
-                raise Exception("Array type mismatch: %s != %s" % (str(atype), str(_atype)))
+                elif atype != _atype:
+                    raise Exception("Array type mismatch: %s != %s" % (str(atype), str(_atype)))
 
-            _m.append(_o)
+                _m.append((atype, _o))
 
             tlen += nidx - idx
 
         _x = [None, None]
 
         for _i in _m:
-            data._concat(_x, (atype, _i))
-
-        if data.length(_x[1], 0) == 1:
-            _x = data.squeeze(_x[1])
+            data._concat(_x, _i)
 
         return _x
 
@@ -249,6 +260,9 @@ class VariableReader():
         shape = shape[1:] + [shape[0]]
 
         atype, array = self._get_array(self._slabtower, key[1:], key[0], shape)
+
+        if array and data.length(array, 0) == 1:
+            array = data.squeeze(array, atype)
 
         return array
 
@@ -459,39 +473,47 @@ class MasterPyslabsWriter(PyslabsWriter):
             _move_proc(src, self.root, attrs)
             shutil.rmtree(src)
 
-        _shape = None
+        _shape = {}
 
         for vn, vc in attrs["vars"].items():
+            _sp = None
+
             for _vcfg in vc["config"]:
                 _vshape = _vcfg["shape"]
-                if _shape is None:
-                    _shape = _vshape
+                if _sp is None:
+                    _sp = _vshape
 
-                elif _shape[0] != _vshape[0] or _shape[2:] != _vshape[2:]:
-                    raise Exception("Shape mismatch: %s != %s" % (str(_shape), str(_vshape)))
+                elif _sp[0] != _vshape[0] or _sp[2:] != _vshape[2:]:
+                    raise Exception("Shape mismatch: %s != %s" % (str(_sp), str(_vshape)))
 
                 else:
-                    _shape[1] += _vshape[1]
+                    _sp[1] += _vshape[1]
+
+            _shape[vn] = _sp
+
 
         for name, varcfg in self.config["vars"].items():
+
+            varcfg["shape"] = _shape[name]
+            varcfg.pop("writes")
 
             if varcfg["check"]:
                 for check, test in varcfg["check"].items():
                     if check == "shape":
                         if isinstance(test, int):
-                            if _shape[0] != test:
+                            if _shape[name][0] != test:
                                 raise Exception("stack dimension mismatch: %d != %d" %
-                                        (_shape[0], test))
+                                        (_shape[name][0], test))
 
                         elif len(test) > 0:
 
-                            if test[0] is not True and _shape[0] != test[0]:
+                            if test[0] is not True and _shape[name][0] != test[0]:
                                 raise Exception("stack dimension mismatch: %d != %d" %
-                                        (_shape[0], test[0]))
+                                        (_shape[name][0], test[0]))
 
-                            if tuple(test[1:]) != tuple(_shape[1:]):
+                            if tuple(test[1:]) != tuple(_shape[name][1:]):
                                 raise Exception("slab shape mismatch: %s != %s" %
-                                        (str(test[1:]), str(tuple(_shape[1:]))))
+                                        (str(test[1:]), str(tuple(_shape[name][1:]))))
 
                     else:
                         raise Exception("Unknown variable test: %s" % check)
@@ -556,14 +578,22 @@ class ParallelPyslabsReader():
 
         if len(path) == 1:
 
-            if path[0] in tower:
+            if isinstance(tower, tarfile.TarInfo):
+                import pdb; pdb.set_trace()
+
+            elif path[0] in tower:
                 raise Exception("Wrong mapping: %s" % path)
 
             tower[path[0]] = entry
 
-        elif path[0] in tower and isinstance(tower[path[0]], dict):
-            self._trie(tower[path[0]], path[1:], entry)
+        elif path[0] in tower:
 
+            if isinstance(tower[path[0]], tarfile.TarInfo):
+                tower[path[0]] = {}
+                self._trie(tower[path[0]], path[1:], entry)
+
+            else:
+                self._trie(tower[path[0]], path[1:], entry)
         else:
             _t = {}
             tower[path[0]] = _t
