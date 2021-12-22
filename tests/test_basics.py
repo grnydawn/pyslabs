@@ -1,4 +1,4 @@
-import os, shutil
+import os, shutil, pytest
 import pyslabs
 
 here = os.path.dirname(__file__)
@@ -9,6 +9,24 @@ slabfile = os.path.join(prjdir, "test.slab")
 NPROCS = 3
 NSIZE = 10
 NITER = 5
+
+
+@pytest.fixture(autouse=True)
+def run_around_tests():
+
+    # before test
+    if os.path.isdir(workdir):
+        shutil.rmtree(workdir)
+ 
+    if os.path.isfile(slabfile):
+        os.remove(slabfile)
+
+    # the test
+    yield
+
+
+    # after test
+    os.remove(slabfile)
 
 def writelist(myid):
 
@@ -23,13 +41,6 @@ def writelist(myid):
 
 
 def test_serial():
-
-    if os.path.isdir(workdir):
-        shutil.rmtree(workdir)
-
-    if os.path.isfile(slabfile):
-        os.remove(slabfile)
-
 
     slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="w")
 
@@ -51,17 +62,9 @@ def test_serial():
     assert all([len(slab)==2 for slab in data[0]])
     assert all([sum(slab[1])==i for i, slab in enumerate(data)])
 
-    os.remove(slabfile)
-
 
 def test_multiprocessing():
     from multiprocessing import Process
-
-    if os.path.isdir(workdir):
-        shutil.rmtree(workdir)
-
-    if os.path.isfile(slabfile):
-        os.remove(slabfile)
 
     slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
 
@@ -97,5 +100,3 @@ def test_multiprocessing():
     assert all([len(slab)==NSIZE*NPROCS for slab in data])
     assert all([len(slab)==2 for slab in data[0]])
     assert data[NITER-1][NSIZE*NPROCS-1] == (NPROCS-1, NITER-1)
-
-    os.remove(slabfile)

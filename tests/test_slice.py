@@ -1,4 +1,4 @@
-import os, shutil
+import os, shutil, pytest
 import pyslabs
 
 here = os.path.dirname(__file__)
@@ -9,6 +9,23 @@ slabfile = os.path.join(prjdir, "test.slab")
 NPROCS = 3
 NSIZE = 10
 NITER = 5
+
+@pytest.fixture(autouse=True)
+def run_around_tests():
+
+    # before test
+    if os.path.isdir(workdir):
+        shutil.rmtree(workdir)
+ 
+    if os.path.isfile(slabfile):
+        os.remove(slabfile)
+
+    # the test
+    yield
+
+
+    # after test
+    os.remove(slabfile)
 
 def f(x):
     return x*x
@@ -26,12 +43,6 @@ def writelist(myid):
 
 
 def test_list():
-
-    if os.path.isdir(workdir):
-        shutil.rmtree(workdir)
- 
-    if os.path.isfile(slabfile):
-        os.remove(slabfile)
        
     data0 = [[ 1, 2, 3], [ 4, 5, 6], [ 7, 8, 9], [10,11,12], [13,14,15]]
     data1 = [[16,17,18], [19,20,21], [22,23,24], [25,26,27], [28,29,30]]
@@ -61,8 +72,6 @@ def test_list():
     myarr2 = myvar[2, 1:4:2, 1:]
     assert myarr2 == [[35,36], [41,42]]
 
-    os.remove(slabfile)
-
 
 def test_numpy():
 
@@ -74,12 +83,6 @@ def test_numpy():
         return
 
     data = np.arange(100).reshape((5, 4, 5))
-
-    if os.path.isdir(workdir):
-        shutil.rmtree(workdir)
- 
-    if os.path.isfile(slabfile):
-        os.remove(slabfile)
 
     with pyslabs.open(slabfile, "w") as slabs:
         myvar = slabs.get_writer("myvar")
@@ -100,17 +103,9 @@ def test_numpy():
     myarr2 = myvar[2, 1:4:2, 1:]
     assert np.all(myarr2 == data[2, 1:4:2, 1:])
 
-    os.remove(slabfile)
-
 
 def test_multiprocessing():
     from multiprocessing import Process
-
-    if os.path.isdir(workdir):
-        shutil.rmtree(workdir)
-
-    if os.path.isfile(slabfile):
-        os.remove(slabfile)
 
     slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
 
@@ -149,8 +144,6 @@ def test_multiprocessing():
     arr2 = var[2, -1]
 
     assert arr2 == data2
-
-    os.remove(slabfile)
 
 # TODO: mpi
 # TODO: random, stress test

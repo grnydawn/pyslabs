@@ -1,4 +1,4 @@
-import os, shutil
+import os, shutil, pytest
 import pyslabs
 
 here = os.path.dirname(__file__)
@@ -9,6 +9,24 @@ slabfile = os.path.join(prjdir, "test.slab")
 NPROCS = 3
 NSIZE = 10
 NITER = 5
+
+
+@pytest.fixture(autouse=True)
+def run_around_tests():
+
+    # before test
+    if os.path.isdir(workdir):
+        shutil.rmtree(workdir)
+ 
+    if os.path.isfile(slabfile):
+        os.remove(slabfile)
+
+    # the test
+    yield
+
+
+    # after test
+    os.remove(slabfile)
 
 def f(x):
     return x*x
@@ -26,12 +44,6 @@ def writelist(myid):
 
 
 def test_tuple():
-
-    if os.path.isdir(workdir):
-        shutil.rmtree(workdir)
- 
-    if os.path.isfile(slabfile):
-        os.remove(slabfile)
        
     data0 = (1,2,3)
     data1 = (4,5,6)
@@ -49,5 +61,3 @@ def test_tuple():
     assert type(myarr) == type(data0)
     assert myarr[0] == data0
     assert myarr[1] == data1
-
-    os.remove(slabfile)

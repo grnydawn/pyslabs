@@ -1,4 +1,4 @@
-import os, sys, shutil
+import os, sys, shutil, pytest
 import numpy as np
 import pyslabs
 
@@ -12,15 +12,31 @@ NPROCS = 3
 NSIZE = 10
 NITER = 5
 
+
+@pytest.fixture(autouse=True)
+def run_around_tests():
+
+    # before test
+    if os.path.isdir(workdir):
+        shutil.rmtree(workdir)
+ 
+    if os.path.isfile(slabfile):
+        os.remove(slabfile)
+
+    # the test
+    yield
+
+
+    # after test
+    os.remove(slabfile)
+
+
 def test_serial():
 
     if resdir not in sys.path:
         sys.path.append(resdir)
 
     from miniweather_serial import main as ser_main
-
-    if os.path.isdir(workdir):
-        shutil.rmtree(workdir)
 
     argv = sys.argv
     sys.argv = [os.path.join(resdir, "miniweather_serial.py"), "-o",
@@ -38,7 +54,6 @@ def test_serial():
     assert not any([x!=0. for x in np.nditer(dens[0])])
     assert not any([x==0. for x in np.nditer(dens[1])])
 
-    os.remove(slabfile)
 
 def test_mpi():
 
@@ -46,9 +61,6 @@ def test_mpi():
         sys.path.append(resdir)
 
     from miniweather_mpi import main as mpi_main
-
-    if os.path.isdir(workdir):
-        shutil.rmtree(workdir)
 
     argv = sys.argv
     sys.argv = [os.path.join(resdir, "miniweather_mpi.py"), "-o",
@@ -65,6 +77,4 @@ def test_mpi():
     assert dens.ndim == 3
     assert not any([x!=0. for x in np.nditer(dens[0])])
     assert not any([x==0. for x in np.nditer(dens[1])])
-
-    os.remove(slabfile)
 
