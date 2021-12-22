@@ -25,7 +25,7 @@ def writelist(myid):
     slabs.close()
 
 
-def ttest_list():
+def test_list():
 
     if os.path.isdir(workdir):
         shutil.rmtree(workdir)
@@ -64,7 +64,7 @@ def ttest_list():
     os.remove(slabfile)
 
 
-def ttest_numpy():
+def test_numpy():
 
     try:
         import numpy as np
@@ -145,11 +145,8 @@ def test_multiprocessing():
 
     assert arr1 == data1
 
-    data2 = data[1:3][-1][1]
-    import pdb; pdb.set_trace()
-
-    # TODO: complete one level  and move to the next level with the same logic
-    arr2 = var[1:3, -1, 1]
+    data2 = data[2][-1]
+    arr2 = var[2, -1]
 
     assert arr2 == data2
 

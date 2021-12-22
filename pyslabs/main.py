@@ -189,11 +189,12 @@ class VariableReader():
         _m = []
 
         # next indices
-        nidxes = list(tower.keys())[1:] + [shape[0]]
+        nidxes = list(tower.keys())[1:] + [str(shape[0])]
 
         tlen = 0 # total length
         slen = 0 # slice length
         atype = None
+        offset = 0
 
         for (idx, val), nidx in zip(tower.items(), nidxes):
 
@@ -201,33 +202,36 @@ class VariableReader():
             nidx = int(nidx)
 
             if nidx <= _k.start:
-                tlen += nidx - idx
                 continue
 
             if idx >= _k.stop:
                 break
 
-            if slen == 0:
-                a = _k.start - tlen
-                slen = nidx - _k.start
+            if idx <= _k.start and _k.start < nidx:
+                a = _k.start - idx
+
+                if _k.stop >= nidx:
+                    b = nidx - idx
+
+                else:
+                    b = _k.stop - idx
+
+            elif idx <= _k.stop and _k.stop <= nidx:
+                a = offset
+                b = _k.stop - idx
 
             else:
-                a = (_k.step - slen % _k.step) % _k.step
-                slen += nidx - idx
-
-            if nidx >= _k.stop:
-                b = _k.stop - tlen
-
-            else:
+                a = offset
                 b = nidx - idx
 
-            #newkey.append(slice(a, b, _k.step))
+            offset = (_k.step - (b - a) % _k.step) % _k.step
+
             _nk = newkey + [slice(a, b, _k.step)]
 
             #_atype, _o = self._get_array(val, key[1:], tkey, shape[1:], newkey)
             _atype, _o = self._get_array(val, key[1:], tkey, shape[1:], _nk)
 
-            if _o:
+            if _o is not None:
                 if atype is None:
                     atype = _atype
 
@@ -235,8 +239,6 @@ class VariableReader():
                     raise Exception("Array type mismatch: %s != %s" % (str(atype), str(_atype)))
 
                 _m.append((atype, _o))
-
-            tlen += nidx - idx
 
         _x = [None, None]
 
@@ -261,8 +263,11 @@ class VariableReader():
 
         atype, array = self._get_array(self._slabtower, key[1:], key[0], shape)
 
-        if array and data.length(array, 0) == 1:
-            array = data.squeeze(array, atype)
+        for _ in range(ndim):
+            if array is not None and data.length(array, 0) == 1:
+                array = data.squeeze(array, atype)
+            else:
+                break
 
         return array
 
