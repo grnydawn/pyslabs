@@ -647,6 +647,10 @@ class MasterPyslabsReader(ParallelPyslabsReader):
 
 def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
 
+    if mode == "r" and nprocs > 1:
+        print("Open with 'r' mode does not support parallel processing.")
+        sys.exit(-1)
+
     if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
         base, ext = os.path.splitext(slabpath)
         beginpath = base + _BEGIN_EXT
