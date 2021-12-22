@@ -141,7 +141,7 @@ class LocalDomain():
             self.hy_dens_theta_int[k] = hr * ht
             self.hy_pressure_int[k] = self.c0 * ((hr*ht)**self.gamma)
 
-        self.slabs = pyslabs.master_open(outfile, workdir=workdir, mode="w")
+        self.slabs = pyslabs.master_open(outfile, 1, workdir=workdir, mode="w")
 
         self.dens_writer = self.slabs.get_writer("dens")
         self.umom_writer = self.slabs.get_writer("umom")

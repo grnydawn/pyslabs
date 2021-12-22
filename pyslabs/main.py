@@ -294,16 +294,16 @@ class PyslabsWriter():
 
     def close(self):
 
-        with io.open(os.path.join(self.path, _FINISHED), "w") as fp:
-            fp.write("FINISHED")
-            fp.flush()
-            os.fsync(fp.fileno())
-
         for name, cfg in self.config["vars"].items():
             with io.open(os.path.join(self.path, name, _VARCFG_FILE), "wb") as fp:
                 pickle.dump(cfg, fp)
                 fp.flush()
                 os.fsync(fp.fileno())
+
+        with io.open(os.path.join(self.path, _FINISHED), "w") as fp:
+            fp.write("FINISHED")
+            fp.flush()
+            os.fsync(fp.fileno())
 
 
 class ParallelPyslabsWriter(PyslabsWriter):
@@ -313,6 +313,10 @@ class ParallelPyslabsWriter(PyslabsWriter):
         varcfg = self.config["vars"][name]
 
         return VariableWriter(os.path.join(self.path, name), varcfg)
+
+    def begin(self):
+        # place holder
+        pass
 
 
 class MasterPyslabsWriter(PyslabsWriter):
@@ -628,32 +632,40 @@ class ParallelPyslabsReader():
 
 
 class MasterPyslabsReader(ParallelPyslabsReader):
+    pass
+#
+#    def __init__(self, slabpath):
+#
+#        super(MasterPyslabsReader, self).__init__(slabpath)
+#
+#    def __enter__(self):
+#        return self
+#
+#    def __exit__(self, exc_type, exc_value, traceback):
+#        return self.close()
 
-    def __init__(self, slabpath):
 
-        super(MasterPyslabsReader, self).__init__(slabpath)
+def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
 
-    def __enter__(self):
-        return self
+    if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
+        base, ext = os.path.splitext(slabpath)
+        beginpath = base + _BEGIN_EXT
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        return self.close()
+        if workdir is None:
+            workdir = base + _WORKDIR_EXT
+    else:
+        beginpath = slabpath + _BEGIN_EXT
+        if workdir is None:
+            workdir = slabpath + _WORKDIR_EXT
+        slabpath += _EXT
 
+    with io.open(beginpath, "wb") as fp:
+        begin = {"workdir": workdir, "slabpath": slabpath, "mode":mode}
+        pickle.dump(begin, fp)
+        fp.flush()
+        os.fsync(fp.fileno())
 
-def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
- 
     if mode == "w":
-        if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
-            base, ext = os.path.splitext(slabpath)
-            beginpath = base + _BEGIN_EXT
-
-            if workdir is None:
-                workdir = base + _WORKDIR_EXT
-        else:
-            beginpath = slabpath + _BEGIN_EXT
-            if workdir is None:
-                workdir = slabpath + _WORKDIR_EXT
-            slabpath += _EXT
 
         # create root directory
         os.makedirs(workdir, exist_ok=True)
@@ -664,12 +676,6 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
                 shutil.rmtree(itempath)
             else:
                 os.remove(itempath)
-
-        with io.open(beginpath, "wb") as fp:
-            begin = {"workdir": workdir}
-            pickle.dump(begin, fp)
-            fp.flush()
-            os.fsync(fp.fileno())
 
         if not os.path.isfile(beginpath):
             raise Exception("Can not create a flag file: %s" % beginpath)
@@ -693,24 +699,26 @@ def master_open(slabpath, mode="r", nprocs=1, archive=True, workdir=None):
         raise Exception("Unknown open mode: %s" % str(mode))
 
 
-def parallel_open(slabpath, mode="r"):
- 
+def parallel_open(slabpath):
+
+    base, ext = os.path.splitext(slabpath)
+    beginpath = (base if ext else slabpath) + _BEGIN_EXT
+
+    start = time.time()
+    while time.time() - start < _MAX_OPEN_WAIT:
+        if os.path.isfile(beginpath):
+            with io.open(beginpath, "rb") as fp:
+                begin = pickle.load(fp)
+                mode = begin["mode"]
+                workdir = begin["workdir"]
+            break
+        time.sleep(0.1)
+
+    if workdir is None:
+        raise Exception("No begin notification: %s" % beginpath)
+
     if mode == "w":
-        base, ext = os.path.splitext(slabpath)
-        beginpath = (base if ext else slabpath) + _BEGIN_EXT
 
-        start = time.time()
-        while time.time() - start < _MAX_OPEN_WAIT:
-            if os.path.isfile(beginpath):
-                with io.open(beginpath, "rb") as fp:
-                    begin = pickle.load(fp)
-                    workdir = begin["workdir"]
-                break
-            time.sleep(0.1)
-
-        if workdir is None:
-            raise Exception("No begin notification: %s" % beginpath)
-     
         start = time.time()
         while time.time() - start < _MAX_OPEN_WAIT:
 
@@ -726,6 +734,7 @@ def parallel_open(slabpath, mode="r"):
             return ParallelPyslabsWriter(workdir, cfg)
 
     elif mode[0] == "r":
+
         return ParallelPyslabsReader(slabpath)
 
     else:
@@ -734,5 +743,18 @@ def parallel_open(slabpath, mode="r"):
     raise Exception("Target configuration is not configured: %s" % cfgpath)
 
 
-def open(*vargs, **kwargs):
-    return master_open(*vargs, **kwargs)
+def open(outfile, *vargs, **kwargs):
+
+    nprocs = kwargs.pop("num_procs", 1)
+
+    if len(vargs) > 0:
+        if "mode" in kwargs:
+            if vargs[0] != kwargs["mode"]:
+                raise Exception("open mode mismatch")
+
+            vargs = []
+
+        else:
+            kwargs["mode"] = vargs[0]
+
+    return master_open(outfile, nprocs, **kwargs)

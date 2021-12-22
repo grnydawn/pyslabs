@@ -32,7 +32,7 @@ def f(x):
 
 def writelist(myid):
 
-    slabs = pyslabs.parallel_open(slabfile, mode="w")
+    slabs = pyslabs.parallel_open(slabfile)
     testvar = slabs.get_writer("test")
 
     for i in range(NITER):
@@ -107,7 +107,7 @@ def test_numpy():
 def test_multiprocessing():
     from multiprocessing import Process
 
-    slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
+    slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
 
     procs = []
 
@@ -129,7 +129,7 @@ def test_multiprocessing():
 
     slabs.close()
 
-    slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
+    slabs = pyslabs.open(slabfile, workdir=workdir, mode="r")
     var = slabs.get_reader("test")
     data = slabs.get_array("test")
 
@@ -144,6 +144,7 @@ def test_multiprocessing():
     arr2 = var[2, -1]
 
     assert arr2 == data2
+
 
 # TODO: mpi
 # TODO: random, stress test

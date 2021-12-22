@@ -46,7 +46,7 @@ def test_serial():
 
     assert os.path.isfile(slabfile)
 
-    slabs = pyslabs.master_open(slabfile, mode="r")
+    slabs = pyslabs.open(slabfile, mode="r")
     dens = slabs.get_array("dens")
     slabs.close()
 
@@ -70,7 +70,7 @@ def test_mpi():
 
     assert os.path.isfile(slabfile)
 
-    slabs = pyslabs.master_open(slabfile, mode="r")
+    slabs = pyslabs.open(slabfile, mode="r")
     dens = slabs.get_array("dens")
     slabs.close()
 

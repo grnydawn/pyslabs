@@ -33,7 +33,7 @@ def f(x):
 
 def writelist(myid):
 
-    slabs = pyslabs.parallel_open(slabfile, mode="w")
+    slabs = pyslabs.parallel_open(slabfile)
     testvar = slabs.get_writer("test")
 
     for i in range(NITER):
@@ -48,7 +48,7 @@ def test_tuple():
     data0 = (1,2,3)
     data1 = (4,5,6)
 
-    with pyslabs.open(slabfile, "w") as slabs:
+    with pyslabs.open(slabfile, mode="w") as slabs:
         myvar = slabs.get_writer("myvar")
         myvar.write(data0)
         myvar.write(data1)

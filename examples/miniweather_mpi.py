@@ -8,7 +8,7 @@ SIM_TIME = 10 # 5 # 10     # total simulation time in seconds
 OUT_FREQ = 5 # 5 # 10       # frequency to perform output in seconds
 DATA_SPEC = "DATA_SPEC_THERMAL" # which data initialization to use
 NUM_VARS = 4        # number of fluid state variables
-OUTFILE = "miniweather_serial.slab" # output data file in pyslabs format
+OUTFILE = "miniweather_mpi.slab" # output data file in pyslabs format
 
 
 class LocalDomain():
@@ -168,7 +168,6 @@ class LocalDomain():
             self.slabs = pyslabs.master_open(outfile, self.nranks, workdir=workdir, mode="w")
 
         else:
-            # wait master
             self.slabs = pyslabs.parallel_open(outfile)
 
         self.dens_writer = self.slabs.get_writer("dens")

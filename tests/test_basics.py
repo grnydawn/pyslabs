@@ -30,7 +30,7 @@ def run_around_tests():
 
 def writelist(myid):
 
-    slabs = pyslabs.parallel_open(slabfile, mode="w")
+    slabs = pyslabs.parallel_open(slabfile)
     testvar = slabs.get_writer("test")
 
     for i in range(NITER):
@@ -42,7 +42,7 @@ def writelist(myid):
 
 def test_serial():
 
-    slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="w")
+    slabs = pyslabs.open(slabfile, workdir=workdir, mode="w")
 
     testvar = slabs.get_writer("test", shape=(True, 10, 2))
 
@@ -52,7 +52,7 @@ def test_serial():
 
     slabs.close()
 
-    slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
+    slabs = pyslabs.master_open(slabfile, 1, workdir=workdir, mode="r")
     data = slabs.get_array("test")
 
     slabs.close()
@@ -66,7 +66,7 @@ def test_serial():
 def test_multiprocessing():
     from multiprocessing import Process
 
-    slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
+    slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
 
     procs = []
 
@@ -88,7 +88,7 @@ def test_multiprocessing():
 
     slabs.close()
 
-    slabs = pyslabs.master_open(slabfile, workdir=workdir, mode="r")
+    slabs = pyslabs.open(slabfile, workdir=workdir, mode="r")
     var = slabs.get_reader("test")
     data = slabs.get_array("test")
 
