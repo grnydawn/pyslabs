@@ -12,7 +12,7 @@ NELEMS = 3
 # for parallel execution
 def func(myid):
 
-    slabs = pyslabs.parallel_open(slabfile, mode="w")
+    slabs = pyslabs.parallel_open(slabfile)
 
     testvar = slabs.get_writer("test")
 
@@ -25,7 +25,7 @@ def main():
     procs = []
 
     # for master process
-    slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
+    slabs = pyslabs.master_open(slabfile, NPROCS, mode="w", )
 
     testvar = slabs.get_writer("test")
 
@@ -42,7 +42,7 @@ def main():
 
     slabs.close()
 
-    with pyslabs.master_open(slabfile, mode="r") as slabs:
+    with pyslabs.open(slabfile, "r") as slabs:
         data = slabs.get_array("test", squeeze=True)
 
     print(type(data))

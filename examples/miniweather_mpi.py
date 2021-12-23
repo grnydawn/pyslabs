@@ -167,10 +167,20 @@ class LocalDomain():
         if self.is_master():
             self.slabs = pyslabs.master_open(outfile, self.nranks, workdir=workdir, mode="w")
 
+            lon = self.slabs.define_dim("lon", self.nx_glob, origin=(0., "O"),
+                points=None, unit=(self.dx, "meter"), desc="longitude", attr_test="T") 
+            height = self.slabs.define_dim("height", self.nz_glob, origin=(0., "O"),
+                unit=(self.dz, "meter"), desc="latitude") 
+            time = self.slabs.define_stack("time", pyslabs.UNLIMITED, origin=0,
+                unit=(self.dt, "second"), desc="time") 
+
         else:
             self.slabs = pyslabs.parallel_open(outfile)
+            lon = self.slabs.get_dim("lon")
+            height = self.slabs.get_dim("height")
+            time = self.slabs.get_stack("time")
 
-        self.dens_writer = self.slabs.get_writer("dens")
+        self.dens_writer = self.slabs.get_writer("dens", shape=(time, lon, height), attr_step="at")
         self.umom_writer = self.slabs.get_writer("umom")
         self.wmom_writer = self.slabs.get_writer("wmom")
         self.rhot_writer = self.slabs.get_writer("rhot")

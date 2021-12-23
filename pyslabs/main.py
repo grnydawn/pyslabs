@@ -1,8 +1,9 @@
-import os, io, pickle, shutil, time, uuid, tarfile, copy, itertools, pprint
+import os, sys, io, pickle, shutil, time, uuid, tarfile, copy, itertools, pprint
 from collections import OrderedDict
 from pyslabs import data
 
 
+UNLIMITED = -1
 _CONFIG_FILE = "__config__"
 _BEGIN_FILE = "__begin__"
 _VARCFG_FILE = "__varcfg__"
@@ -27,6 +28,41 @@ _VARCFG_INIT = {
     "shape": None,
     "check": {}
 } 
+_DIMCFG_INIT = {
+} 
+
+class Dimension():
+
+    def __init__(self, config):
+        self.config = config
+
+    def __getattr__(self, name):
+        if name in self.config:
+            return self.config[name]
+
+    def __getstate__(self):
+        return self.__dict__
+
+    def __setstate__(self, d):
+        self.__dict__.update(d)
+
+    def check(self, name, that):
+
+        this = getattr(self, name, None)
+
+        if name == "length":
+            if this != UNLIMITED and that != this:
+                raise Exception("stack dimension mismatch: %d != %d" %
+                        (that, this))
+        else:
+            if that != this:
+                raise Exception("dimension attribute mismatch: %s != %s" %
+                        (str(that), str(this)))
+
+
+class StackDimension(Dimension):
+    pass
+
 
 class VariableWriter():
 
@@ -100,27 +136,25 @@ class VariableWriter():
 
 
 # TODO: add slab-level services
-# TODO: add slice to array
 # TODO: use buffer for tarfile
 
 class VariableReader():
 
-    def __init__(self, tfile, slabtower, config, start=None, shape=None):
+    def __init__(self, tfile, slabtower, config, dims, start=None):
 
         self._tfile = tfile
         self._slabtower = slabtower
+        self._dims = dims
         self._config = config
-        self.shape = shape if shape else tuple(self._config["shape"])
-        #self._start = start if start else tuple([0]*len(self.shape))
+        self.shape = tuple(self._config["shape"]) # can be dim names or int values
 
     @property
     def ndim(self):
         return len(self.shape)
 
     def __len__(self):
-        return self.shape[0]
-
-    # TODO: generate a list of indexes and find out start stop
+        s = self.shape[0]
+        return (self._dims[s]["length"] if s in self._dims else s)
 
     def _get_slice(self, k, length):
 
@@ -257,8 +291,15 @@ class VariableReader():
         elif len(key) < ndim:
             key = key + (slice(None, None, None),) * (ndim-len(key))
 
+        shape = []
+        for s in self.shape:
+            if s in self._dims:
+                shape.append(self._dims[s]["length"])
+
+            else:
+                shape.append(s)
+
         # put stack dimension at the last
-        shape = list(self.shape)
         shape = shape[1:] + [shape[0]]
 
         atype, array = self._get_array(self._slabtower, key[1:], key[0], shape)
@@ -308,11 +349,23 @@ class PyslabsWriter():
 
 class ParallelPyslabsWriter(PyslabsWriter):
 
-    def get_writer(self, name):
+    def get_writer(self, name, **kwargs):
 
         varcfg = self.config["vars"][name]
 
         return VariableWriter(os.path.join(self.path, name), varcfg)
+    
+    def get_dim(self, name):
+
+        dimcfg = self.config["dims"][name]
+
+        return Dimension(dimcfg)
+
+    def get_stack(self, name):
+
+        dimcfg = self.config["dims"][name]
+
+        return StackDimension(dimcfg)
 
     def begin(self):
         # place holder
@@ -364,16 +417,76 @@ class MasterPyslabsWriter(PyslabsWriter):
             raise Exception("Number of processes mismatch: %d != %d" %
                     (len(procs), nprocs))
 
-    def get_writer(self, name, shape=None):
+    def get_writer(self, name, shape=None, **kwargs):
 
         varcfg = copy.deepcopy(_VARCFG_INIT)
 
-        if shape:
-            varcfg["check"]["shape"] = shape
+        if shape is not None:
+            if isinstance(shape, (int, StackDimension)):
+                _shape = (shape if isinstance(shape, StackDimension) else
+                            self.define_stack("stack", shape))
+
+            else:
+                _stack = (shape[0] if isinstance(shape[0], StackDimension) else
+                            self.define_stack("stack", int(shape[0])))
+
+                _shape = [_stack]
+                for i, s in enumerate(shape[1:]):
+                    _dim = (s if isinstance(s, Dimension) else
+                        self.define_dim("dim%d"%(i+1), int(s)))
+                    _shape.append(_dim)
+ 
+            varcfg["check"]["shape"] = _shape
 
         self.config["vars"][name] = varcfg
 
         return VariableWriter(os.path.join(self.path, name), varcfg)
+
+    def define_dim(self, name, length, origin=(0, "O"), unit=(1, ""),
+                    points=None, desc="N/A", **kwargs):
+
+        if isinstance(origin, int):
+            origin = (origin, "O")
+
+        if isinstance(unit, int):
+            unit = (unit, "")
+
+        if points is not None:
+            _length = len(points)
+            if _length != length:
+                raise Exception("Dimension '%s' length mismatch: %d != %d" %
+                                (name, length, _length))
+
+            origin = (points[0], origin[1])
+            unit = (None, unit[1])
+
+        dimcfg = copy.deepcopy(_DIMCFG_INIT)
+        dimcfg["name"] = name
+        dimcfg["length"] = length
+        dimcfg["origin"] = origin
+        dimcfg["unit"] = unit
+        dimcfg["points"] = points
+        dimcfg["desc"] = desc
+        dimcfg["attrs"] = dict((k[5:],v) for k,v in kwargs.items() if
+                                k.startswith("attr_"))
+
+        self.config["dims"][name] = dimcfg
+
+        return Dimension(dimcfg)
+
+    def define_stack(self, name, length, origin=(0, "O"), unit=(1, "slab"),
+                    points=None, desc="N/A", **kwargs):
+
+        dim = self.define_dim(name, length, origin=origin, unit=unit,
+                                points=points, desc=desc, **kwargs)
+
+        if dim.config["unit"]:
+            if (not isinstance(dim.config["unit"][0], int) and
+                dim.config["unit"][0] < 0):
+                raise Exception("Stack unit is not a positive integer: %s" %
+                    str(dim.config["unit"][0]))
+        
+        return StackDimension(dim.config)
 
     def close(self):
  
@@ -507,26 +620,25 @@ class MasterPyslabsWriter(PyslabsWriter):
             varcfg.pop("writes")
 
             if varcfg["check"]:
-                for check, test in varcfg["check"].items():
+                for check in varcfg["check"].keys():
+                    test = varcfg["check"][check]
+
                     if check == "shape":
-                        if isinstance(test, int):
-                            if _shape[name][0] != test:
-                                raise Exception("stack dimension mismatch: %d != %d" %
-                                        (_shape[name][0], test))
+                        if isinstance(test, StackDimension):
+                            test.check("length", _shape[name][0])
+                            varcfg["shape"] = test.name
 
                         elif len(test) > 0:
+                            test[0].check("length", _shape[name][0])
+                            varcfg["shape"][0] = test[0].name
 
-                            if test[0] is not True and _shape[name][0] != test[0]:
-                                raise Exception("stack dimension mismatch: %d != %d" %
-                                        (_shape[name][0], test[0]))
-
-                            if tuple(test[1:]) != tuple(_shape[name][1:]):
-                                raise Exception("slab shape mismatch: %s != %s" %
-                                        (str(test[1:]), str(tuple(_shape[name][1:]))))
-
+                            for i, (_test, _length) in enumerate(zip(test[1:], _shape[name][1:])):
+                                _test.check("length", _length)
+                                varcfg["shape"][i+1] = _test.name
                     else:
                         raise Exception("Unknown variable test: %s" % check)
 
+                varcfg.pop("check")
 
         archive = self.config["__control__"]["archive"]
         slabpath = self.config["__control__"]["slabpath"]
@@ -555,7 +667,8 @@ class MasterPyslabsWriter(PyslabsWriter):
 
 class ParallelPyslabsReader():
 
-    def __init__(self, slabpath):
+    def __init__(self, slabpath, beginpath):
+        self.beginpath = beginpath
         self.slabpath = slabpath
         self.slabarchive = tarfile.open(slabpath)
         self.slabtower = OrderedDict()
@@ -614,8 +727,9 @@ class ParallelPyslabsReader():
     def get_reader(self, name, squeeze=False):
 
         varcfg = self.config["vars"][name]
+        dimcfg = self.config["dims"]
 
-        return VariableReader(self.slabarchive, self.slabtower[name], varcfg)
+        return VariableReader(self.slabarchive, self.slabtower[name], varcfg, dimcfg)
 
     def get_array(self, name, squeeze=False):
 
@@ -628,21 +742,76 @@ class ParallelPyslabsReader():
         return self
 
     def __exit__(self, type, value, traceback):
-        pass
+        self.close()
 
+    def _traverse(self, tree, bag):
+            try:
+                for k, v in tree.items():
+                    if bag["check"](k, v):
+                        bag["data"].append(bag["output"](k, v))
+                    self._traverse(v, bag)
+
+            except AttributeError as err:
+                pass
+
+            except Exception as err:
+                import pdb; pdb.set_trace()
+                print(err)
+
+    def info(self, mode, *args, **kwargs):
+
+        if mode == "list":
+            return tuple(self.slabtower.keys())
+
+        elif mode == "var":
+            out = {}
+            var = self.get_reader(args[0])
+
+            out["dims"] = var.ndim # dims: 3 (time, lat, lon)
+            out["shape"] = var.ndim
+            import pdb; pdb.set_trace()
+
+        elif mode == "slab":
+            out = {}
+            bag = {"check": lambda k, v: isinstance(v, tarfile.TarInfo),
+                    "output": lambda k, v: v}
+
+            for var, tree in self.slabtower.items():
+                data = []
+                bag["data"] = data
+                self._traverse(tree, bag)
+
+                if len(data) > 0:
+                    totalsize = 0
+                    maxsize = 0
+                    minsize = sys.maxsize
+                    nslabs = len(data)
+
+                    for tar in data:
+                        totalsize += tar.size
+                        if tar.size > maxsize:
+                            maxsize = tar.size
+                        if tar.size < minsize:
+                            minsize = tar.size
+                else:
+                    totalsize = maxsize = minsize = nslabs = 0
+
+                out[var] = (nslabs, totalsize, maxsize, minsize)
+
+            return out
+
+        elif mode == "":
+            import pdb; pdb.set_trace()
+            cfg = self.config
 
 class MasterPyslabsReader(ParallelPyslabsReader):
-    pass
-#
-#    def __init__(self, slabpath):
-#
-#        super(MasterPyslabsReader, self).__init__(slabpath)
-#
-#    def __enter__(self):
-#        return self
-#
-#    def __exit__(self, exc_type, exc_value, traceback):
-#        return self.close()
+
+    def __del__(self):
+
+        super(MasterPyslabsReader, self).__del__()
+
+        if os.path.isfile(self.beginpath):
+            os.remove(self.beginpath)
 
 
 def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
@@ -697,7 +866,7 @@ def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
 
     elif mode[0] == "r":
 
-        return MasterPyslabsReader(slabpath)
+        return MasterPyslabsReader(slabpath, beginpath)
 
     else:
         raise Exception("Unknown open mode: %s" % str(mode))
@@ -739,7 +908,7 @@ def parallel_open(slabpath):
 
     elif mode[0] == "r":
 
-        return ParallelPyslabsReader(slabpath)
+        return ParallelPyslabsReader(slabpath, beginpath)
 
     else:
         raise Exception("Unknown open mode: %s" % str(mode))

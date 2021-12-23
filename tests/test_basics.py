@@ -44,7 +44,7 @@ def test_serial():
 
     slabs = pyslabs.open(slabfile, workdir=workdir, mode="w")
 
-    testvar = slabs.get_writer("test", shape=(True, 10, 2))
+    testvar = slabs.get_writer("test", shape=(pyslabs.UNLIMITED, 10, 2))
 
     for i in range(NITER):
         mylist = [(0, i)]*NSIZE

@@ -146,5 +146,4 @@ def test_multiprocessing():
     assert arr2 == data2
 
 
-# TODO: mpi
 # TODO: random, stress test
