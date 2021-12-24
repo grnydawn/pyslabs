@@ -221,7 +221,10 @@ def _merge(tfile, slabobj):
     _f = []
     _atype = None
 
-    for key in sorted(slabobj):
+
+    sortedkey = sorted([(int(k.split(".")[0]), k) for k in slabobj], key=lambda x: x[0])
+
+    for (_, key) in sortedkey:
         item = slabobj[key]
 
         if isinstance(item, dict):

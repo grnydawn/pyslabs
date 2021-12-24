@@ -22,8 +22,22 @@ def cmd_info(args):
             var = fp.info("var", args.var, verbose=args.verbose)
 
         else:
-            print(fp.info("", args.var, verbose=args.verbose))
+            for k, v in fp.info("", args.var, verbose=args.verbose):
+                if k == "size":
+                    print("size: %d bytes" % v)
 
+                elif k == "dims":
+                    buf = []
+                    for n, l in v:
+                        buf.append("%s(%d)" % (n, l))
+                    print("dims: " + ", ".join(buf))
+
+                elif k == "vars":
+                    buf = []
+                    for n, s in v:
+                        buf.append("%s(%s)" % (n, ", ".join([str(_s) for _s in s])))
+                    print("vars: " + ", ".join(buf))
+                   
 
 def main():
     import argparse

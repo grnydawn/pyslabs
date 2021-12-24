@@ -150,11 +150,16 @@ class VariableReader():
 
     @property
     def ndim(self):
-        return len(self.shape)
 
-    def __len__(self):
-        s = self.shape[0]
-        return (self._dims[s]["length"] if s in self._dims else s)
+        if self.shape[0] == 1:
+            return len(self.shape) - 1
+
+        else:
+            return len(self.shape)
+
+#    def __len__(self):
+#        s = self.shape[0]
+#        return (self._dims[s]["length"] if s in self._dims else s)
 
     def _get_slice(self, k, length):
 
@@ -182,6 +187,8 @@ class VariableReader():
 
     def _merge_stack(self, tower, tkey, shape, newkey):
 
+        #TODO: manipulate tkey (None?) to skip stack
+
         _k = self._get_slice(tkey, shape[0])
 
         _m = []
@@ -189,7 +196,6 @@ class VariableReader():
 
         for name, tinfo in itertools.islice(tower.items(),
                 _k.start, _k.stop, _k.step):
-
             _, _atype, _ = name.split(".")
 
             if atype is None:
@@ -283,7 +289,15 @@ class VariableReader():
 
     def __getitem__(self, key):
 
-        ndim = self.ndim
+        ndim = len(self.shape)
+
+        if self.shape[0] == 1:
+
+            if isinstance(key, int):
+                key = (0, key)
+
+            else:
+                key = (0, ) + key
 
         if isinstance(key, int):
             key = (key,) + (slice(None, None, None),) * (ndim-1)
@@ -299,12 +313,17 @@ class VariableReader():
             else:
                 shape.append(s)
 
+        stacklength = shape[0]
+
         # put stack dimension at the last
         shape = shape[1:] + [shape[0]]
 
         atype, array = self._get_array(self._slabtower, key[1:], key[0], shape)
 
-        for _ in range(ndim):
+        #if stacklength == 1:
+        #    array = array[0]
+
+        for i in range(ndim):
             if array is not None and data.length(array, 0) == 1:
                 array = data.squeeze(array, atype)
             else:
@@ -767,8 +786,6 @@ class ParallelPyslabsReader():
             out = {}
             var = self.get_reader(args[0])
 
-            out["dims"] = var.ndim # dims: 3 (time, lat, lon)
-            out["shape"] = var.ndim
             import pdb; pdb.set_trace()
 
         elif mode == "slab":
@@ -801,8 +818,29 @@ class ParallelPyslabsReader():
             return out
 
         elif mode == "":
-            import pdb; pdb.set_trace()
-            cfg = self.config
+
+            out = []
+
+            out.append(("version", self.config["version"]))
+
+            dbuf = []
+            for n, d in self.config["dims"].items():
+                dbuf.append((n,  d["length"]))
+
+            out.append(("dims", tuple(dbuf)))
+
+            vbuf = []
+            for n, v in self.config["vars"].items():
+                if "shape" in v:
+                    vbuf.append((n, v["shape"]))
+                else:
+                    vbuf.append((n, None))
+
+            out.append(("vars", tuple(vbuf)))
+            out.append(("size", os.path.getsize(self.slabpath)))
+
+            return out
+
 
 class MasterPyslabsReader(ParallelPyslabsReader):
 
@@ -865,6 +903,9 @@ def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
         return MasterPyslabsWriter(workdir, cfg)
 
     elif mode[0] == "r":
+
+        if not os.path.isfile(slabpath):
+            raise Exception("Slabfile is not found: %s" % slabpath)
 
         return MasterPyslabsReader(slabpath, beginpath)
 
