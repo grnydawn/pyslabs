@@ -30,7 +30,7 @@ def run_around_tests():
 
 def writelist(myid):
 
-    slabs = pyslabs.parallel_open(slabfile)
+    slabs = pyslabs.parallel_open(slabfile, mode="w")
     testvar = slabs.get_writer("test")
 
     for i in range(NITER):

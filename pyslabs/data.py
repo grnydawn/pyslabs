@@ -268,7 +268,11 @@ def get_array(tfile, slabobj, _squeeze):
 
     stype, arr = _merge(tfile, slabobj)
 
-    if _squeeze and length(arr, 0) == 1:
-        arr = squeeze(arr, stype)
+    #if _squeeze and length(arr, 0) == 1:
+    #    arr = squeeze(arr, stype)
+
+    if _squeeze:
+        while arr is not None and length(arr, 0) == 1:
+            arr = squeeze(arr, stype)
 
     return arr

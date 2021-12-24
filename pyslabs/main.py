@@ -140,22 +140,23 @@ class VariableWriter():
 
 class VariableReader():
 
-    def __init__(self, tfile, slabtower, config, dims, start=None):
+    def __init__(self, tfile, slabtower, config, dims, squeeze, start=None):
 
         self._tfile = tfile
         self._slabtower = slabtower
         self._dims = dims
         self._config = config
+        self._squeeze = squeeze
         self.shape = tuple(self._config["shape"]) # can be dim names or int values
 
-    @property
-    def ndim(self):
-
-        if self.shape[0] == 1:
-            return len(self.shape) - 1
-
-        else:
-            return len(self.shape)
+#    @property
+#    def ndim(self):
+#
+#        if self.shape[0] == 1:
+#            return len(self.shape) - 1
+#
+#        else:
+#            return len(self.shape)
 
 #    def __len__(self):
 #        s = self.shape[0]
@@ -291,13 +292,8 @@ class VariableReader():
 
         ndim = len(self.shape)
 
-        if self.shape[0] == 1:
-
-            if isinstance(key, int):
-                key = (0, key)
-
-            else:
-                key = (0, ) + key
+        if self._squeeze and self.shape[0] == 1:
+            key = (0, key) if isinstance(key, int) else ((0,) + key)
 
         if isinstance(key, int):
             key = (key,) + (slice(None, None, None),) * (ndim-1)
@@ -313,21 +309,17 @@ class VariableReader():
             else:
                 shape.append(s)
 
-        stacklength = shape[0]
-
         # put stack dimension at the last
         shape = shape[1:] + [shape[0]]
 
         atype, array = self._get_array(self._slabtower, key[1:], key[0], shape)
 
-        #if stacklength == 1:
-        #    array = array[0]
-
-        for i in range(ndim):
-            if array is not None and data.length(array, 0) == 1:
-                array = data.squeeze(array, atype)
-            else:
-                break
+        if self._squeeze:
+            try:
+                while array is not None and data.length(array, 0) == 1:
+                    array = data.squeeze(array, atype)
+            except IndexError as err:
+                pass
 
         return array
 
@@ -669,9 +661,6 @@ class MasterPyslabsWriter(PyslabsWriter):
             fp.flush()
             os.fsync(fp.fileno())
 
-        if os.path.isfile(beginpath):
-            os.remove(beginpath)
-
         # archive if requested
         if archive:
             dirname, basename = os.path.split(self.root)
@@ -686,8 +675,7 @@ class MasterPyslabsWriter(PyslabsWriter):
 
 class ParallelPyslabsReader():
 
-    def __init__(self, slabpath, beginpath):
-        self.beginpath = beginpath
+    def __init__(self, slabpath):
         self.slabpath = slabpath
         self.slabarchive = tarfile.open(slabpath)
         self.slabtower = OrderedDict()
@@ -743,14 +731,14 @@ class ParallelPyslabsReader():
     def __del__(self):
         self.slabarchive.close()
 
-    def get_reader(self, name, squeeze=False):
+    def get_reader(self, name, squeeze=True):
 
         varcfg = self.config["vars"][name]
         dimcfg = self.config["dims"]
 
-        return VariableReader(self.slabarchive, self.slabtower[name], varcfg, dimcfg)
+        return VariableReader(self.slabarchive, self.slabtower[name], varcfg, dimcfg, squeeze)
 
-    def get_array(self, name, squeeze=False):
+    def get_array(self, name, squeeze=True):
 
         return data.get_array(self.slabarchive, self.slabtower[name], squeeze)
 
@@ -843,13 +831,7 @@ class ParallelPyslabsReader():
 
 
 class MasterPyslabsReader(ParallelPyslabsReader):
-
-    def __del__(self):
-
-        super(MasterPyslabsReader, self).__del__()
-
-        if os.path.isfile(self.beginpath):
-            os.remove(self.beginpath)
+    pass
 
 
 def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
@@ -858,25 +840,25 @@ def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
         print("Open with 'r' mode does not support parallel processing.")
         sys.exit(-1)
 
-    if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
-        base, ext = os.path.splitext(slabpath)
-        beginpath = base + _BEGIN_EXT
-
-        if workdir is None:
-            workdir = base + _WORKDIR_EXT
-    else:
-        beginpath = slabpath + _BEGIN_EXT
-        if workdir is None:
-            workdir = slabpath + _WORKDIR_EXT
-        slabpath += _EXT
-
-    with io.open(beginpath, "wb") as fp:
-        begin = {"workdir": workdir, "slabpath": slabpath, "mode":mode}
-        pickle.dump(begin, fp)
-        fp.flush()
-        os.fsync(fp.fileno())
-
     if mode == "w":
+
+        if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
+            base, ext = os.path.splitext(slabpath)
+            beginpath = base + _BEGIN_EXT
+
+            if workdir is None:
+                workdir = base + _WORKDIR_EXT
+        else:
+            beginpath = slabpath + _BEGIN_EXT
+            if workdir is None:
+                workdir = slabpath + _WORKDIR_EXT
+            slabpath += _EXT
+
+        with io.open(beginpath, "wb") as fp:
+            begin = {"workdir": workdir, "slabpath": slabpath, "mode":mode}
+            pickle.dump(begin, fp)
+            fp.flush()
+            os.fsync(fp.fileno())
 
         # create root directory
         os.makedirs(workdir, exist_ok=True)
@@ -907,31 +889,31 @@ def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
         if not os.path.isfile(slabpath):
             raise Exception("Slabfile is not found: %s" % slabpath)
 
-        return MasterPyslabsReader(slabpath, beginpath)
+        return MasterPyslabsReader(slabpath)
 
     else:
         raise Exception("Unknown open mode: %s" % str(mode))
 
 
-def parallel_open(slabpath):
-
-    base, ext = os.path.splitext(slabpath)
-    beginpath = (base if ext else slabpath) + _BEGIN_EXT
-
-    start = time.time()
-    while time.time() - start < _MAX_OPEN_WAIT:
-        if os.path.isfile(beginpath):
-            with io.open(beginpath, "rb") as fp:
-                begin = pickle.load(fp)
-                mode = begin["mode"]
-                workdir = begin["workdir"]
-            break
-        time.sleep(0.1)
-
-    if workdir is None:
-        raise Exception("No begin notification: %s" % beginpath)
+def parallel_open(slabpath, mode="w"):
 
     if mode == "w":
+
+        base, ext = os.path.splitext(slabpath)
+        beginpath = (base if ext else slabpath) + _BEGIN_EXT
+
+        start = time.time()
+        while time.time() - start < _MAX_OPEN_WAIT:
+            if os.path.isfile(beginpath):
+                with io.open(beginpath, "rb") as fp:
+                    begin = pickle.load(fp)
+                    mode = begin["mode"]
+                    workdir = begin["workdir"]
+                break
+            time.sleep(0.1)
+
+        if workdir is None:
+            raise Exception("No begin notification: %s" % beginpath)
 
         start = time.time()
         while time.time() - start < _MAX_OPEN_WAIT:
@@ -949,7 +931,7 @@ def parallel_open(slabpath):
 
     elif mode[0] == "r":
 
-        return ParallelPyslabsReader(slabpath, beginpath)
+        return ParallelPyslabsReader(slabpath)
 
     else:
         raise Exception("Unknown open mode: %s" % str(mode))

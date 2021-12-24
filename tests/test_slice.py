@@ -1,4 +1,4 @@
-import os, shutil, pytest, random
+import os, shutil, pytest, random, time
 import pyslabs
 
 here = os.path.dirname(__file__)
@@ -26,15 +26,18 @@ def run_around_tests():
 
 
     # after test
-    os.remove(slabfile)
+    if os.path.isfile(slabfile):
+        os.remove(slabfile)
+
 
 def f(x):
     return x*x
 
+
 def writelist(myid):
 
     slabs = pyslabs.parallel_open(slabfile)
-    testvar = slabs.get_writer("test")
+    testvar = slabs.get_writer("test", mode="w")
 
     for i in range(NITER):
         mylist = [(myid, i)]*NSIZE
@@ -45,7 +48,7 @@ def writelist(myid):
 
 def writenumpy(myid, pdata, start):
 
-    slabs = pyslabs.parallel_open(slabfile)
+    slabs = pyslabs.parallel_open(slabfile, mode="w")
     ndata = slabs.get_writer("ndata")
     ndata.write(pdata, start)
 
@@ -73,7 +76,6 @@ def ttest_list():
     with pyslabs.open(slabfile, "r") as slabs:
         myvar = slabs.get_reader("myvar")
 
-    assert myvar.ndim == 3
     assert myvar.shape == (5, 5, 3)
 
     myarr1 = myvar[1, :, :]
@@ -104,7 +106,6 @@ def ttest_numpy():
     with pyslabs.open(slabfile, "r") as slabs:
         myvar = slabs.get_reader("myvar")
 
-    assert myvar.ndim == 3
     assert myvar.shape == (5, 4, 5)
 
     myarr1 = myvar[1, :, :]
@@ -179,10 +180,13 @@ def ttest_random():
         if os.path.isfile(slabfile):
             os.remove(slabfile)
 
-        #ndim = random.randint(1, 5)
-        #shape = random.choices(range(1, 7), k=ndim)
-        shape = [5, 2, 6, 3]
-        ndim = len(shape)
+        # for generating data
+        ndim = random.randint(1, 5)
+        shape = random.choices(range(1, 7), k=ndim)
+
+        # for generating particular shape
+        #shape = [5, 2, 6, 3]
+        #ndim = len(shape)
 
         s0 = shape[0]
         shape[0] *= NPROCS
@@ -190,6 +194,8 @@ def ttest_random():
         data = np.arange(np.prod(shape)).reshape(shape)
 
         slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
+
+        ndata = slabs.get_writer("ndata")
 
         procs = []
 
@@ -202,23 +208,24 @@ def ttest_random():
             p.start()
             procs.append(p)
 
-        ndata = slabs.get_writer("ndata")
-
         slabs.begin()
 
-        ndata.write(data[:s0])
 
         for i in range(NPROCS-1):
             procs[i].join()
 
-        slabs.close()
+        ndata.write(data[:s0])
 
-        import pdb; pdb.set_trace()
+        slabs.close()
 
         with pyslabs.open(slabfile) as slabs:
             outvar = slabs.get_reader("ndata")
-            outdata = slabs.get_array("ndata", squeeze=True)
+            outdata = slabs.get_array("ndata")
 
+#        assert np.all(data == outdata)
+#        assert np.all(data[0] == outvar[0])
+
+# For debug
         if not np.all(data == outdata):
             import pdb; pdb.set_trace()
             print("FAIL: get_array mismatch")
@@ -237,6 +244,7 @@ def ttest_random():
         # after test
         if os.path.isfile(slabfile):
             os.remove(slabfile)
+
 
 def test_failecases():
     from multiprocessing import Process
@@ -267,18 +275,20 @@ def test_failecases():
             outdata = slabs.get_array("ndata", squeeze=True)
 
         if not np.all(data == outdata):
-            print("")
-            where = np.where(data != outdata) 
+            #print("")
+            #where = np.where(data != outdata) 
             #print(len(where), [len(i) for i in where])
-            print(len(where), len(where[0]))
-            import pdb; pdb.set_trace()
+            #print(len(where), len(where[0]))
+            #import pdb; pdb.set_trace()
             print("FAIL: get_array mismatch")
+            assert False
         else:
             print("PASS: get_array match")
 
         if not np.all(data[0] == outvar[0]):
             import pdb; pdb.set_trace()
             print("FAIL: get_var mismatch")
+            assert False
         else:
             print("PASS: get_var match")
 
