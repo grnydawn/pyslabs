@@ -6,7 +6,11 @@ def dump(slab, file):
 
 
 def concat(arrays, axis=0):
-    return np.concatenate(arrays, axis=axis)
+    try:
+        return np.concatenate(arrays, axis=axis)
+    except Exception as err:
+        import pdb; pdb.set_trace()
+        print(err)
 
 
 def stack(arrays):

@@ -140,13 +140,13 @@ class VariableWriter():
 
 class VariableReader():
 
-    def __init__(self, tfile, slabtower, config, dims, squeeze, start=None):
+    def __init__(self, tfile, slabtower, config, dims, pack_stack_dim, start=None):
 
         self._tfile = tfile
         self._slabtower = slabtower
         self._dims = dims
         self._config = config
-        self._squeeze = squeeze
+        self._pack_stack_dim = pack_stack_dim
         self.shape = tuple(self._config["shape"]) # can be dim names or int values
 
 #    @property
@@ -292,7 +292,7 @@ class VariableReader():
 
         ndim = len(self.shape)
 
-        if self._squeeze and self.shape[0] == 1:
+        if self._pack_stack_dim and self.shape[0] == 1:
             key = (0, key) if isinstance(key, int) else ((0,) + key)
 
         if isinstance(key, int):
@@ -314,12 +314,11 @@ class VariableReader():
 
         atype, array = self._get_array(self._slabtower, key[1:], key[0], shape)
 
-        if self._squeeze:
-            try:
-                while array is not None and data.length(array, 0) == 1:
-                    array = data.squeeze(array, atype)
-            except IndexError as err:
-                pass
+        try:
+            if self._pack_stack_dim and array is not None and data.length(array, 0) == 1:
+                array = data.squeeze_dim0(array, atype)
+        except IndexError as err:
+            pass
 
         return array
 
@@ -677,7 +676,7 @@ class ParallelPyslabsReader():
 
     def __init__(self, slabpath):
         self.slabpath = slabpath
-        self.slabarchive = tarfile.open(slabpath)
+        self.slabarchive = tarfile.open(slabpath, mode="r:")
         self.slabtower = OrderedDict()
 
         _tower = {}
@@ -728,22 +727,19 @@ class ParallelPyslabsReader():
             tower[path[0]] = _t
             self._trie(_t, path[1:], entry)
 
-    def __del__(self):
-        self.slabarchive.close()
-
-    def get_reader(self, name, squeeze=True):
+    def get_reader(self, name, pack_stack_dim=True):
 
         varcfg = self.config["vars"][name]
         dimcfg = self.config["dims"]
 
-        return VariableReader(self.slabarchive, self.slabtower[name], varcfg, dimcfg, squeeze)
+        return VariableReader(self.slabarchive, self.slabtower[name], varcfg, dimcfg, pack_stack_dim)
 
-    def get_array(self, name, squeeze=True):
+    def get_array(self, name, pack_stack_dim=True):
 
-        return data.get_array(self.slabarchive, self.slabtower[name], squeeze)
+        return data.get_array(self.slabarchive, self.slabtower[name], pack_stack_dim)
 
     def close(self):
-        pass
+        self.slabarchive.close()
 
     def __enter__(self):
         return self
@@ -840,6 +836,8 @@ def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
         print("Open with 'r' mode does not support parallel processing.")
         sys.exit(-1)
 
+    data._clear_cache()
+
     if mode == "w":
 
         if slabpath.endswith(_EXT) or slabpath.endswith(_CEXT):
@@ -896,6 +894,8 @@ def master_open(slabpath, nprocs, mode="r", archive=True, workdir=None):
 
 
 def parallel_open(slabpath, mode="w"):
+
+    data._clear_cache()
 
     if mode == "w":
 

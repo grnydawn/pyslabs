@@ -10,6 +10,11 @@ _supported_arrays = {
 
 _cache = OrderedDict()
 
+
+def _clear_cache():
+    _cache.clear()
+
+
 def _evict(num_items=1):
     _cache.popitem(last=False)
 
@@ -179,7 +184,7 @@ def length(slab, dim):
     return _s[dim]
 
 
-def squeeze(slab, atype):
+def squeeze_dim0(slab, atype):
 
     if atype == "numpy":
         return dnp.squeeze(slab)
@@ -264,15 +269,14 @@ def _merge(tfile, slabobj):
 
     return _m
 
-def get_array(tfile, slabobj, _squeeze):
+def get_array(tfile, slabobj, pack_stack_dim):
 
     stype, arr = _merge(tfile, slabobj)
 
-    #if _squeeze and length(arr, 0) == 1:
-    #    arr = squeeze(arr, stype)
-
-    if _squeeze:
-        while arr is not None and length(arr, 0) == 1:
-            arr = squeeze(arr, stype)
+    try:
+        if pack_stack_dim and arr is not None and length(arr, 0) == 1:
+            arr = squeeze_dim0(arr, stype)
+    except IndexError as err:
+        pass
 
     return arr

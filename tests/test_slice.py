@@ -158,7 +158,7 @@ def ttest_multiprocessing():
 
 
 
-def ttest_random():
+def test_random():
     from multiprocessing import Process
 
     try:
@@ -210,11 +210,10 @@ def ttest_random():
 
         slabs.begin()
 
+        ndata.write(data[:s0])
 
         for i in range(NPROCS-1):
             procs[i].join()
-
-        ndata.write(data[:s0])
 
         slabs.close()
 
@@ -246,7 +245,7 @@ def ttest_random():
             os.remove(slabfile)
 
 
-def test_failecases():
+def ttest_failecases():
     from multiprocessing import Process
 
     try:
@@ -264,15 +263,24 @@ def test_failecases():
             continue
 
         shape = [int(i) for i in basename.split("_")]
+        #if shape != [1,6,4,3]: continue
+        #if shape == [1,6,4,3]: import pdb; pdb.set_trace()
+
         ndim = len(shape)
-        s0 = shape[0] // NPROCS
+        s1 = shape[1] // NPROCS
         print("\nshape: %s" % str(shape))
 
-        data = np.arange(np.prod(shape)).reshape(shape)
+        _data = np.arange(np.prod(shape[1:])).reshape(shape[1:])
+
+        if shape[0] > 1:
+           data = np.stack([_data] * shape[0])
+
+        else:
+            data = _data 
 
         with pyslabs.open(slabfile) as slabs:
             outvar = slabs.get_reader("ndata")
-            outdata = slabs.get_array("ndata", squeeze=True)
+            outdata = slabs.get_array("ndata", pack_stack_dim=True)
 
         if not np.all(data == outdata):
             #print("")
