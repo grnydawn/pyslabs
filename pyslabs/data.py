@@ -240,6 +240,7 @@ def _merge(tfile, slabobj):
 
             if _atype is None:
                 _atype = atype
+                # TODO: check size  of loaded array based on key and next key
                 _f.append(load(tfile, item, atype)[1])
 
             elif _atype != atype:

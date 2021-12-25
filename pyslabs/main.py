@@ -172,9 +172,13 @@ class VariableReader():
                 start, stop, step = k, k+1, 1
 
         else:
+
             start = 0 if k.start is None else k.start
             stop = length if k.stop is None else k.stop
             step = 1 if k.step is None else k.step
+
+            if step < 0:
+                raise Exception("Slicing step should be positve integer: %s" % str(k))
 
             if start < 0:
                 start = length + start
@@ -182,18 +186,21 @@ class VariableReader():
             if stop < 0:
                 stop = length + stop
 
-        minval = length
-        maxval = 0
+        return slice(start, stop, step)
 
-        # TODO: REVISE THIS 
-        for i in range(start, stop, step):
-            if i < minval:
-                minval = i
-
-            if i > maxval:
-                maxval = i
-
-        return slice(minval, maxval + 1, step)
+#
+#        minval = length
+#        maxval = 0
+#
+#        # TODO: REVISE THIS 
+#        for i in range(start, stop, step):
+#            if i < minval:
+#                minval = i
+#
+#            if i > maxval:
+#                maxval = i
+#
+#        return slice(minval, maxval + 1, step)
 
     def _merge_stack(self, tower, tkey, shape, newkey):
 
@@ -204,21 +211,6 @@ class VariableReader():
         #TODO: manipulate tkey (None?) to skip stack
 
         _k = self._get_slice(tkey, shape[0])
-
-        if _k.step < 0:
-            if _k.start <= _k.stop:
-                return atype, None
-
-            tower = reversed(tower)
-            _k.step = -_k.step
-            _r = (_k.stop - _k.start) % _k.step
-
-            _start = _k.start
-
-            _k.start = _k.stop 
-            _k.stop = _start
-
-            import pdb; pdb.set_trace()
 
         _m = []
         atype = None
@@ -321,6 +313,9 @@ class VariableReader():
         return _x
 
     def __getitem__(self, key):
+
+        if not isinstance(key, int) and any((k.step <= 0) for k in key if isinstance(k, slice)):
+            raise Exception("Slice step should be positive integer: %s" % str(key))
 
         ndim = len(self.shape)
 

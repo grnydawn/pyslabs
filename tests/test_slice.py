@@ -39,11 +39,8 @@ def generate_randomkey(shape):
             nwrites = random.randint(1, 5)
 
             start = random.randrange(-length, length)
-            stop = random.randrange(-length, length)
-
-            step = random.randrange(-length, length)
-            while step == 0:
-                step = random.randrange(-length, length)
+            stop = random.randrange(start, length)
+            step = random.randrange(1, max(2, length))
                 
             if len([e for e in range(start, stop, step)]) != 0:
                 break
@@ -189,8 +186,8 @@ def test_random():
         print("No numpy module is fould. Test is skipped.")
         return
 
-    NTESTS = 100
-    NSUBTESTS = 100
+    NTESTS = 300
+    NSUBTESTS = 300
     count = 0
 
     while (count < NTESTS):
@@ -276,22 +273,29 @@ def test_random():
             key = generate_randomkey(data.shape)
 
             print("KEY: ", str(key))
+            subdata = data.__getitem__(key) 
+            suboutdata = outdata.__getitem__(key)
+            suboutvar = outvar.__getitem__(key)
 
-            try:
-                if not np.all(data.__getitem__(key) == outdata.__getitem__(key)):
+            if subdata is None or suboutdata is None or suboutvar is None:
+
+                subcount += 1
+                print("None array")
+                continue
+
+            if len(subdata) > 0 and len(suboutdata) > 0 and len(suboutvar) > 0:
+                if not np.all(subdata == suboutdata):
+                    
                     print("FAIL: (data, outdata)  mismatch")
                     import pdb; pdb.set_trace()
 
-                if not np.all(data.__getitem__(key) == outvar.__getitem__(key)):
+                if not np.all(subdata == suboutvar):
                     print("FAIL: (data, outvar)  mismatch")
                     import pdb; pdb.set_trace()
 
-                if not np.all(outdata.__getitem__(key) == outvar.__getitem__(key)):
+                if not np.all(suboutdata == suboutvar):
                     print("FAIL: (outdata, outvar)  mismatch")
                     import pdb; pdb.set_trace()
-
-            except TypeError as err:
-                import pdb; pdb.set_trace()
 
             subcount += 1
             
