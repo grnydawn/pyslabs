@@ -30,8 +30,27 @@ def run_around_tests():
         os.remove(slabfile)
 
 
-def f(x):
-    return x*x
+def generate_randomkey(shape):
+
+    key = []
+    for length in shape:
+
+        for _ in range(100):
+            nwrites = random.randint(1, 5)
+
+            start = random.randrange(-length, length)
+            stop = random.randrange(-length, length)
+
+            step = random.randrange(-length, length)
+            while step == 0:
+                step = random.randrange(-length, length)
+                
+            if len([e for e in range(start, stop, step)]) != 0:
+                break
+
+        key.append(slice(start, stop, step))
+
+    return tuple(key)
 
 
 def writelist(myid):
@@ -170,7 +189,8 @@ def test_random():
         print("No numpy module is fould. Test is skipped.")
         return
 
-    NTESTS = 10
+    NTESTS = 100
+    NSUBTESTS = 100
     count = 0
 
     while (count < NTESTS):
@@ -192,7 +212,6 @@ def test_random():
         print("NWRITES: %s" % str(nwrites))
 
         # for generating particular shape
-#TODO : debug
         #shape = [3,5]
         #nwrites = 5
         #ndim = len(shape)
@@ -236,23 +255,47 @@ def test_random():
         slabs.close()
 
         with pyslabs.open(slabfile) as slabs:
-            outvar = slabs.get_reader("ndata")
-            outdata = slabs.get_array("ndata")
+            outvar = slabs.get_reader("ndata", pack_stack_dim=True)
+            outdata = slabs.get_array("ndata", pack_stack_dim=True)
 
 # For debug
 # TODO check elements and subarrays
         if not np.all(data == outdata):
-            import pdb; pdb.set_trace()
             print("FAIL: get_array mismatch")
+            import pdb; pdb.set_trace()
 
-        print("PASS: get_array match")
 
         if not np.all(data[0] == outvar[0]):
-            import pdb; pdb.set_trace()
             print("FAIL: get_var mismatch")
+            import pdb; pdb.set_trace()
 
-        print("PASS: get_var match")
+        subcount = 0
 
+        while subcount < NSUBTESTS:
+
+            key = generate_randomkey(data.shape)
+
+            print("KEY: ", str(key))
+
+            try:
+                if not np.all(data.__getitem__(key) == outdata.__getitem__(key)):
+                    print("FAIL: (data, outdata)  mismatch")
+                    import pdb; pdb.set_trace()
+
+                if not np.all(data.__getitem__(key) == outvar.__getitem__(key)):
+                    print("FAIL: (data, outvar)  mismatch")
+                    import pdb; pdb.set_trace()
+
+                if not np.all(outdata.__getitem__(key) == outvar.__getitem__(key)):
+                    print("FAIL: (outdata, outvar)  mismatch")
+                    import pdb; pdb.set_trace()
+
+            except TypeError as err:
+                import pdb; pdb.set_trace()
+
+            subcount += 1
+            
+        print("PASS")
 
         count += 1
 
@@ -295,7 +338,7 @@ def ttest_failecases():
             data = _data 
 
         with pyslabs.open(slabfile) as slabs:
-            outvar = slabs.get_reader("ndata")
+            outvar = slabs.get_reader("ndata", pack_stack_dim=True)
             outdata = slabs.get_array("ndata", pack_stack_dim=True)
 
         if not np.all(data == outdata):

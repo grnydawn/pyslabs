@@ -172,11 +172,20 @@ class VariableReader():
                 start, stop, step = k, k+1, 1
 
         else:
-            start, stop, step = k.start or 0, k.stop or length, k.step or 1
+            start = 0 if k.start is None else k.start
+            stop = length if k.stop is None else k.stop
+            step = 1 if k.step is None else k.step
+
+            if start < 0:
+                start = length + start
+
+            if stop < 0:
+                stop = length + stop
 
         minval = length
         maxval = 0
 
+        # TODO: REVISE THIS 
         for i in range(start, stop, step):
             if i < minval:
                 minval = i
@@ -188,32 +197,55 @@ class VariableReader():
 
     def _merge_stack(self, tower, tkey, shape, newkey):
 
+
+        #For a positive step, r[i] = start + step*i where i >= 0 and r[i] < stop.
+        #For a negative step, r[i] = start + step*i, but the constraints are i >= 0 and r[i] > stop.
+
         #TODO: manipulate tkey (None?) to skip stack
 
         _k = self._get_slice(tkey, shape[0])
 
+        if _k.step < 0:
+            if _k.start <= _k.stop:
+                return atype, None
+
+            tower = reversed(tower)
+            _k.step = -_k.step
+            _r = (_k.stop - _k.start) % _k.step
+
+            _start = _k.start
+
+            _k.start = _k.stop 
+            _k.stop = _start
+
+            import pdb; pdb.set_trace()
+
         _m = []
         atype = None
 
-        for name, tinfo in itertools.islice(tower.items(),
-                _k.start, _k.stop, _k.step):
-            _, _atype, _ = name.split(".")
+        try:
+            for name, tinfo in itertools.islice(tower.items(),
+                    _k.start, _k.stop, _k.step):
+                _, _atype, _ = name.split(".")
 
-            if atype is None:
-                atype = _atype
+                if atype is None:
+                    atype = _atype
 
-            elif atype != _atype:
-                raise Exception("Array type mismatch: %s != %s" % (str(atype), str(_atype)))
+                elif atype != _atype:
+                    raise Exception("Array type mismatch: %s != %s" % (str(atype), str(_atype)))
 
-            _, slab = data.load(self._tfile, tinfo, atype)
+                _, slab = data.load(self._tfile, tinfo, atype)
 
-            slab = data.get_slice(slab, atype, newkey)
+                slab = data.get_slice(slab, atype, newkey)
 
-            _m.append(slab)
+                _m.append(slab)
+
+        except ValueError as err:
+
+            import pdb; pdb.set_trace()
+            print(err)
 
         _a = data.stack(_m, atype)
-        #if len(_a) == 1:
-        #    _a = _a[0]
 
         return (atype, _a)
 
@@ -727,14 +759,14 @@ class ParallelPyslabsReader():
             tower[path[0]] = _t
             self._trie(_t, path[1:], entry)
 
-    def get_reader(self, name, pack_stack_dim=True):
+    def get_reader(self, name, pack_stack_dim=False):
 
         varcfg = self.config["vars"][name]
         dimcfg = self.config["dims"]
 
         return VariableReader(self.slabarchive, self.slabtower[name], varcfg, dimcfg, pack_stack_dim)
 
-    def get_array(self, name, pack_stack_dim=True):
+    def get_array(self, name, pack_stack_dim=False):
 
         return data.get_array(self.slabarchive, self.slabtower[name], pack_stack_dim)
 
