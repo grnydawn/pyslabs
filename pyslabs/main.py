@@ -607,8 +607,8 @@ class MasterPyslabsWriter(PyslabsWriter):
 
         _shape = {}
 
-        for vn, vc in attrs["vars"].items():
-            _sp = None
+        for vn, vc in attrs["vars"].items(): # var name, var config
+            _sp = None # temp shape
 
             for _vcfg in vc["config"]:
                 _vshape = _vcfg["shape"]

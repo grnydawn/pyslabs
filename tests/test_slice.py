@@ -46,11 +46,13 @@ def writelist(myid):
     slabs.close()
 
 
-def writenumpy(myid, pdata, start):
+def writenumpy(myid, pdata, start, nwrites):
 
     slabs = pyslabs.parallel_open(slabfile, mode="w")
     ndata = slabs.get_writer("ndata")
-    ndata.write(pdata, start)
+
+    for _ in range(nwrites):
+        ndata.write(pdata, start)
 
     slabs.close()
 
@@ -183,15 +185,30 @@ def test_random():
         # for generating data
         ndim = random.randint(1, 5)
         shape = random.choices(range(1, 7), k=ndim)
+        nwrites = random.randint(1, 5)
+
+        print("")
+        print("SHAPE: %s" % str(shape))
+        print("NWRITES: %s" % str(nwrites))
 
         # for generating particular shape
-        #shape = [5, 2, 6, 3]
+#TODO : debug
+        #shape = [3,5]
+        #nwrites = 5
         #ndim = len(shape)
+
+        _data = np.arange(np.prod(shape)).reshape(shape)
+
+        if nwrites > 1:
+            _d = []
+            for _ in range(nwrites):
+                _d.append(_data)
+            data = np.stack(_d, axis=0)
+        else:
+            data = _data
 
         s0 = shape[0]
         shape[0] *= NPROCS
-
-        data = np.arange(np.prod(shape)).reshape(shape)
 
         slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
 
@@ -202,15 +219,16 @@ def test_random():
         for i in range(NPROCS-1):
             start = (i+1)*s0
             stop = (i+2)*s0
-            pdata = data[start:stop]
+            pdata = _data[start:stop]
             pshape = [0]*ndim; pshape[0] = start
-            p = Process(target=writenumpy, args=(i+1, pdata, start))
+            p = Process(target=writenumpy, args=(i+1, pdata, start, nwrites))
             p.start()
             procs.append(p)
 
         slabs.begin()
 
-        ndata.write(data[:s0])
+        for _ in range(nwrites):
+            ndata.write(_data[:s0], start=0)
 
         for i in range(NPROCS-1):
             procs[i].join()
@@ -221,10 +239,8 @@ def test_random():
             outvar = slabs.get_reader("ndata")
             outdata = slabs.get_array("ndata")
 
-#        assert np.all(data == outdata)
-#        assert np.all(data[0] == outvar[0])
-
 # For debug
+# TODO check elements and subarrays
         if not np.all(data == outdata):
             import pdb; pdb.set_trace()
             print("FAIL: get_array mismatch")

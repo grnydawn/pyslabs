@@ -153,7 +153,7 @@ def shape(slab):
 
     s = []
 
-    while (slab):
+    while slab:
         try:
             l = len(slab)
 
