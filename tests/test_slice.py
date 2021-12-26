@@ -94,13 +94,13 @@ def ttest_list():
     with pyslabs.open(slabfile, "r") as slabs:
         myvar = slabs.get_reader("myvar")
 
-    assert myvar.shape == (5, 5, 3)
+        assert myvar.shape == (5, 5, 3)
 
-    myarr1 = myvar[1, :, :]
-    assert myarr1 == data1
+        myarr1 = myvar[1, :, :]
+        assert myarr1 == data1
 
-    myarr2 = myvar[2, 1:4:2, 1:]
-    assert myarr2 == [[35,36], [41,42]]
+        myarr2 = myvar[2, 1:4:2, 1:]
+        assert myarr2 == [[35,36], [41,42]]
 
 
 def ttest_numpy():
@@ -124,16 +124,16 @@ def ttest_numpy():
     with pyslabs.open(slabfile, "r") as slabs:
         myvar = slabs.get_reader("myvar")
 
-    assert myvar.shape == (5, 4, 5)
+        assert myvar.shape == (5, 4, 5)
 
-    myarr1 = myvar[1, :, :]
-    assert np.all(myarr1 == data[1,:,:])
+        myarr1 = myvar[1, :, :]
+        assert np.all(myarr1 == data[1,:,:])
 
-    myarr2 = myvar[2, 1:4:2, 1:]
-    assert np.all(myarr2 == data[2, 1:4:2, 1:])
+        myarr2 = myvar[2, 1:4:2, 1:]
+        assert np.all(myarr2 == data[2, 1:4:2, 1:])
 
 
-def ttest_multiprocessing():
+def test_multiprocessing():
     from multiprocessing import Process
 
     slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
@@ -162,9 +162,8 @@ def ttest_multiprocessing():
     var = slabs.get_reader("test")
     data = slabs.get_array("test")
 
-    slabs.close()
-
     data1 = data[1]
+    import pdb; pdb.set_trace()
     arr1 = var[1,:,:]
 
     assert arr1 == data1
@@ -174,9 +173,10 @@ def ttest_multiprocessing():
 
     assert arr2 == data2
 
+    slabs.close()
 
 
-def test_random():
+def ttest_random():
     from multiprocessing import Process
 
     try:

@@ -204,7 +204,6 @@ class VariableReader():
 
     def _merge_stack(self, tower, tkey, shape, newkey):
 
-
         #For a positive step, r[i] = start + step*i where i >= 0 and r[i] < stop.
         #For a negative step, r[i] = start + step*i, but the constraints are i >= 0 and r[i] > stop.
 
@@ -238,6 +237,8 @@ class VariableReader():
             print(err)
 
         _a = data.stack(_m, atype)
+
+        # _a shape shoud be the same to the original stack shape
 
         return (atype, _a)
 
@@ -310,12 +311,10 @@ class VariableReader():
         for _i in _m:
             data._concat(_x, _i)
 
+        import pdb; pdb.set_trace()
         return _x
 
     def __getitem__(self, key):
-
-        if not isinstance(key, int) and any((k.step <= 0) for k in key if isinstance(k, slice)):
-            raise Exception("Slice step should be positive integer: %s" % str(key))
 
         ndim = len(self.shape)
 
@@ -327,6 +326,11 @@ class VariableReader():
 
         elif len(key) < ndim:
             key = key + (slice(None, None, None),) * (ndim-len(key))
+
+
+        for k in key:
+            if isinstance(k, slice) and k.step is not None and k.step <= 0:
+                raise Exception("Slice step should be positive integer: %s" % str(key))
 
         shape = []
         for s in self.shape:
