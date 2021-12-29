@@ -22,6 +22,7 @@ def cmd_info(args):
             var = fp.info("var", args.var, verbose=args.verbose)
 
         else:
+            # TODO : add slab (shape, type, number)
             for k, v in fp.info("", args.var, verbose=args.verbose):
                 if k == "size":
                     print("size: %d bytes" % v)

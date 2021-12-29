@@ -19,14 +19,6 @@ def arraytype(slab):
     return "pickle", "dat"
 
 
-class SlabSlice():
-    pass
-
-
-class SlabCarrier(list):
-    pass
-
-
 def pickle_dump(path, obj):
     with io.open(path, "wb") as fp:
         pickle.dump(obj, fp)

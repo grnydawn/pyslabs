@@ -567,10 +567,12 @@ class PyslabsReaderV1():
 
     def get_array(self, name, unstackable=False):
 
-        return self.get_reader(name, unstackable).asarray()
+        return self.get_reader(name, unstackable)[:]
 
     def close(self):
-        self.tar_file.close()
+
+        if not self.tar_file.closed:
+            self.tar_file.close()
 
     def __enter__(self):
         return self
