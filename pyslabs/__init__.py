@@ -1,3 +1,4 @@
 # pyslabs module
 
-from .main import master_open, parallel_open, open, UNLIMITED
+from .const import UNLIMITED
+from .core import master_open, parallel_open, open

@@ -1,6 +1,45 @@
-"""pyslabs error handling"""
+"""Pyslabs error module
 
-class PySlabsException(Exception):
+"""
+
+
+class Pyslabs_Error(Exception):
+    pass
+
+
+class PE_Open_Unknownmode(Pyslabs_Error):
+    pass
+
+
+class PE_Init_Nobeginfile(Pyslabs_Error):
+    pass
+
+
+class PE_Slab_Shapemismatch(Pyslabs_Error):
+    pass
+
+
+class PE_Begin_Numproc(Pyslabs_Error):
+    pass
+
+
+class PE_Close_Numproc(Pyslabs_Error):
+    pass
+
+
+class PE_Close_Timeout(Pyslabs_Error):
+    pass
+
+
+class PE_Close_Shapemismatch(Pyslabs_Error):
+    pass
+
+
+class PE_Close_Unknowncheck(Pyslabs_Error):
+    pass
+
+
+class PE_Write_Duplicateslabfil(Pyslabs_Error):
     pass
 
 

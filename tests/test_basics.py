@@ -44,16 +44,17 @@ def test_serial():
 
     slabs = pyslabs.open(slabfile, workdir=workdir, mode="w")
 
-    testvar = slabs.get_writer("test", shape=(pyslabs.UNLIMITED, 10, 2))
+    testvar = slabs.get_writer("test", (NSIZE, 2))
 
     for i in range(NITER):
         mylist = [(0, i)]*NSIZE
-        testvar.write(mylist, (0, 0), shape=(10, 2))
+        testvar.write(mylist, (0, 0))
+        testvar.stacking()
 
     slabs.close()
 
-    slabs = pyslabs.master_open(slabfile, 1, workdir=workdir, mode="r")
-    data = slabs.get_array("test")
+    slabs = pyslabs.master_open(slabfile, "r", workdir=workdir)
+    data = slabs.get_array("test", unstackable=True)
 
     slabs.close()
 
@@ -63,7 +64,7 @@ def test_serial():
     assert all([sum(slab[1])==i for i, slab in enumerate(data)])
 
 
-def test_multiprocessing():
+def ttest_multiprocessing():
     from multiprocessing import Process
 
     slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
