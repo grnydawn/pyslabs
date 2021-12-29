@@ -85,6 +85,19 @@ def stack(upper, lower):
     return array
 
 
+def squeeze(array):
+
+    atype, ext = arraytype(array)
+
+    if atype == "numpy":
+        sq= npif.squeeze(array)
+
+    else:
+        sq = bif.squeeze(array)
+
+    return sq
+
+
 # slice of array
 def get_slice(array, key):
 

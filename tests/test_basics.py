@@ -54,14 +54,19 @@ def test_serial():
     slabs.close()
 
     slabs = pyslabs.master_open(slabfile, "r", workdir=workdir)
+    reader = slabs.get_reader("test", unstackable=True)
     data = slabs.get_array("test", unstackable=True)
-
     slabs.close()
 
     assert len(data) == NITER
     assert all([len(slab)==NSIZE for slab in data])
     assert all([len(slab)==2 for slab in data[0]])
     assert all([sum(slab[1])==i for i, slab in enumerate(data)])
+
+    subdata = reader[1]
+    assert len(subdata) == NSIZE
+    assert all([len(slab)==2 for slab in subdata])
+    assert all([slab==(0,1) for slab in subdata])
 
 
 def ttest_multiprocessing():

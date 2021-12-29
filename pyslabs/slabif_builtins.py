@@ -66,6 +66,19 @@ def stack(stacker, lower):
 
     return stacker
 
+
+def squeeze(array):
+
+    if isinstance(array, (list, tuple)):
+        if len(array) == 1:
+            array = array[0]
+
+    else:
+        import pdb; pdb.set_trace()        
+
+    return array
+
+
 def get_slice(slab, key):
 
     from pyslabs import slabif
