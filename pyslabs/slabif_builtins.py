@@ -70,6 +70,9 @@ def stack(stacker, lower):
     return stacker
 
 
+def get_blank():
+    return tuple()
+
 def concatenate(concater, panel, axis):
     print("Concatenate IN (concat, panel, axis): ", concater, panel, axis)
 

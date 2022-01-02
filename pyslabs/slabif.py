@@ -77,11 +77,15 @@ def stack(upper, lower):
 
     atype, ext = arraytype(lower)
 
-    if atype == "numpy":
-        array = npif.stack(upper, lower)
+    try:
+        if atype == "numpy":
+            array = npif.stack(upper, lower)
 
-    else:
-        array = bif.stack(upper, lower)
+        else:
+            array = bif.stack(upper, lower)
+    except Exception as err:
+        import pdb; pdb.set_trace()
+        print(err)
 
     return array
 
@@ -90,11 +94,15 @@ def concatenate(concater, panel, axis):
 
     atype, ext = arraytype(concater)
 
-    if atype == "numpy":
-        array = npif.concatenate(concater, panel, axis)
+    try:
+        if atype == "numpy":
+            array = npif.concatenate(concater, panel, axis)
 
-    else:
-        array = bif.concatenate(concater, panel, axis)
+        else:
+            array = bif.concatenate(concater, panel, axis)
+    except Exception as err:
+        import pdb; pdb.set_trace()
+        print(err)
 
     return array
 
@@ -128,6 +136,17 @@ def get_slice(array, key):
     return sl
 
 
+def get_blank(atype):
+
+    if atype == "numpy":
+        bl = npif.get_blank()
+
+    else:
+        bl = bif.get_blank()
+
+    return bl
+
+
 def get_column(tar_file, slab_tower, stack_key, slab_key):
 
 
@@ -135,6 +154,9 @@ def get_column(tar_file, slab_tower, stack_key, slab_key):
 
     #For a positive step, r[i] = start + step*i where i >= 0 and r[i] < stop.
     #For a negative step, r[i] = start + step*i, but the constraints are i >= 0 and r[i] > stop.
+
+    slab_type = None
+    keys = sorted(slab_tower.keys(), key=lambda x:int(x.split(".")[0]))
 
     if isinstance(stack_key, int):
         is_slice = False
@@ -144,30 +166,45 @@ def get_column(tar_file, slab_tower, stack_key, slab_key):
         is_slice = True
         stack_slice = stack_key
 
-    slab_type = None
-    keys = sorted(slab_tower.keys(), key=lambda x:int(x.split(".")[0]))
+    if isinstance(stack_key, int):
+        is_slice = False
+        k0 = stack_key
+        if k0 < 0:
+            k0st = len(keys) + k0
+            stack_slice = slice(k0st, k0st+1, 1)
+
+        else:
+            stack_slice = slice(k0, k0+1, 1)
+
+    else:
+        is_slice = True
+        st = stack_key.start
+        if st < 0: st = st + len(keys)
+        so = stack_key.stop
+        if so < 0: so = so + len(keys)
+        se = stack_key.step
+        if se < 0:
+            raise PE_Slabif_Negativestep()
+
+        stack_slice = slice(st, so, se)
 
     stacker = None
 
-    try:
-        for key in itertools.islice(keys, stack_slice.start, stack_slice.stop,
-                                    stack_slice.step):
-            tinfo = slab_tower[key]
-            _, _stype, _ = key.split(".")
+    print("Gen_Column itertool islice: ", stack_slice)
 
-            if slab_type is None:
-                slab_type = _stype
+    for key in itertools.islice(keys, stack_slice.start, stack_slice.stop,
+                                stack_slice.step):
+        tinfo = slab_tower[key]
+        _, _stype, _ = key.split(".")
 
-            elif slab_type != _stype:
-                raise PE_Read_Slabtypemismatch("%s != %s" % (slab_type, _stype))
+        if slab_type is None:
+            slab_type = _stype
 
-            slab_slice = get_slice(load(tar_file, tinfo, slab_type), slab_key)
-            stacker = stack(stacker, slab_slice)
+        elif slab_type != _stype:
+            raise PE_Read_Slabtypemismatch("%s != %s" % (slab_type, _stype))
 
-    except ValueError as err:
-
-        import pdb; pdb.set_trace()
-        print(err)
+        slab_slice = get_slice(load(tar_file, tinfo, slab_type), slab_key)
+        stacker = stack(stacker, slab_slice)
 
     #if not is_slice:
     #    stacker = squeeze(stacker)
@@ -186,16 +223,29 @@ def get_array(tar_file, slab_tower, shape, slab_key, stack_key, new_key=None):
         return is_squeezed, column
 
     cidxes = sorted([int(k) for k in slab_tower.keys()])
+    nidxes = list(cidxes)[1:] + [shape[0]]
 
     if isinstance(slab_key[0], int):
         is_slice = False
-        nidxes = list(cidxes)[1:] + [shape[0]]
-        ckey = slice(slab_key[0], slab_key[0]+1, 1)
+        k0 = slab_key[0]
+        if k0 < 0:
+            k0st = shape[0] + k0
+            ckey = slice(k0st, k0st+1, 1)
+
+        else:
+            ckey = slice(slab_key[0], slab_key[0]+1, 1)
 
     else:
         is_slice = True
-        nidxes = list(cidxes)[1:] + [shape[0]]
-        ckey = slab_key[0]
+        st = slab_key[0].start
+        if st < 0: st = st + shape[0]
+        so = slab_key[0].stop
+        if so < 0: so = so + shape[0]
+        se = slab_key[0].step
+        if se < 0:
+            raise PE_Slabif_Negativestep()
+
+        ckey = slice(st, so, se)
 
     concater = None
 
@@ -260,7 +310,11 @@ def get_array(tar_file, slab_tower, shape, slab_key, stack_key, new_key=None):
 
     if not is_slice:
         print("TYPE: ", type(concater).__name__)
+        if concater is None: import pdb; pdb.set_trace()
         is_squeezed, concater = squeeze(concater)
+
+    if concater is None:
+        concater = get_blank(atype)
 
     print("Get_array OUT: ", concater)
     return is_squeezed, concater

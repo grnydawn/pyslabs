@@ -33,14 +33,14 @@ def run_around_tests():
 def generate_randomkey(shape):
 
     key = []
-    for length in shape:
+    for length in shape[:random.randrange(1, max(1, len(shape)))]:
 
         for _ in range(100):
             nwrites = random.randint(1, 5)
 
             start = random.randrange(-length, length)
             stop = random.randrange(start, length)
-            step = random.randrange(1, max(2, length))
+            step = random.randrange(1, max(2, int((stop-start)/2)))
                 
             if len([e for e in range(start, stop, step)]) != 0:
                 break
@@ -53,7 +53,7 @@ def generate_randomkey(shape):
 def writelist(myid):
 
     slabs = pyslabs.parallel_open(slabfile)
-    testvar = slabs.get_writer("test", mode="w")
+    testvar = slabs.get_writer("test", mode="w", autostack=True)
 
     for i in range(NITER):
         mylist = [(myid, i)]*NSIZE
@@ -67,8 +67,8 @@ def writenumpy(myid, pdata, start, nwrites):
     slabs = pyslabs.parallel_open(slabfile, mode="w")
     ndata = slabs.get_writer("ndata")
 
-    for _ in range(nwrites):
-        ndata.write(pdata, start)
+    for i in range(nwrites):
+        ndata.write(pdata[i], start)
 
     slabs.close()
 
@@ -103,7 +103,7 @@ def ttest_list():
         assert myarr2 == [[35,36], [41,42]]
 
 
-def test_numpy():
+def ttest_numpy():
 
     try:
         import numpy as np
@@ -138,7 +138,7 @@ def test_numpy():
 def ttest_multiprocessing():
     from multiprocessing import Process
 
-    slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
+    slabs = pyslabs.master_open(slabfile, mode="w", num_procs=NPROCS)
 
     procs = []
 
@@ -147,13 +147,14 @@ def ttest_multiprocessing():
         p.start()
         procs.append(p)
 
-    testvar = slabs.get_writer("test", shape=(NITER, NSIZE*NPROCS, 2))
+    testvar = slabs.get_writer("test", (NSIZE, 2))
 
     slabs.begin()
 
     for i in range(NITER):
         mylist = [(0, i)]*NSIZE
-        testvar.write(mylist, (0, 0), shape=(NSIZE, 2))
+        testvar.write(mylist, (0, 0))
+        testvar.stacking()
 
     for i in range(NPROCS-1):
         procs[i].join()
@@ -161,11 +162,10 @@ def ttest_multiprocessing():
     slabs.close()
 
     slabs = pyslabs.open(slabfile, workdir=workdir, mode="r")
-    var = slabs.get_reader("test")
+    var = slabs.get_reader("test", unstackable=True)
     data = slabs.get_array("test")
 
     data1 = data[1]
-    import pdb; pdb.set_trace()
     arr1 = var[1,:,:]
 
     assert arr1 == data1
@@ -203,11 +203,17 @@ def ttest_random():
 
         # for generating data
         ndim = random.randint(1, 5)
-        shape = random.choices(range(1, 7), k=ndim)
+        slab_shape = random.choices(range(1, 7), k=ndim)
         nwrites = random.randint(1, 5)
+        proc_shape = list(slab_shape)
+        proc_shape[0] *= NPROCS
+        proc_shape = tuple(proc_shape)
+        array_shape = (nwrites,) + proc_shape
 
         print("")
-        print("SHAPE: %s" % str(shape))
+        print("SLAB SHAPE: %s" % str(slab_shape))
+        print("PROC SHAPE: %s" % str(proc_shape))
+        print("ARRAY SHAPE: %s" % str(array_shape))
         print("NWRITES: %s" % str(nwrites))
 
         # for generating particular shape
@@ -215,29 +221,30 @@ def ttest_random():
         #nwrites = 5
         #ndim = len(shape)
 
-        _data = np.arange(np.prod(shape)).reshape(shape)
+        data = np.arange(np.prod(array_shape)).reshape(array_shape)
+#
+#        if nwrites > 1:
+#            _d = []
+#            for _ in range(nwrites):
+#                _d.append(_data)
+#            data = np.stack(_d, axis=0)
+#        else:
+#            data = _data
 
-        if nwrites > 1:
-            _d = []
-            for _ in range(nwrites):
-                _d.append(_data)
-            data = np.stack(_d, axis=0)
-        else:
-            data = _data
+        #slab_shape = shape
+        #s0 = shape[0]
+        #shape[0] *= NPROCS
 
-        s0 = shape[0]
-        shape[0] *= NPROCS
+        slabs = pyslabs.master_open(slabfile, mode="w", num_procs=NPROCS)
 
-        slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
-
-        ndata = slabs.get_writer("ndata")
+        ndata = slabs.get_writer("ndata", slab_shape, autostack=True)
 
         procs = []
 
         for i in range(NPROCS-1):
-            start = (i+1)*s0
-            stop = (i+2)*s0
-            pdata = _data[start:stop]
+            start = (i+1)*slab_shape[0]
+            stop = (i+2)*slab_shape[0]
+            pdata = data[:, start:stop]
             pshape = [0]*ndim; pshape[0] = start
             p = Process(target=writenumpy, args=(i+1, pdata, start, nwrites))
             p.start()
@@ -245,8 +252,8 @@ def ttest_random():
 
         slabs.begin()
 
-        for _ in range(nwrites):
-            ndata.write(_data[:s0], start=0)
+        for i in range(nwrites):
+            ndata.write(data[i, 0:slab_shape[0]], start=0)
 
         for i in range(NPROCS-1):
             procs[i].join()
@@ -254,18 +261,13 @@ def ttest_random():
         slabs.close()
 
         with pyslabs.open(slabfile) as slabs:
-            outvar = slabs.get_reader("ndata", pack_stack_dim=True)
-            outdata = slabs.get_array("ndata", pack_stack_dim=True)
+            outvar = slabs.get_reader("ndata", unstackable=True)
+            outdata = slabs.get_array("ndata", unstackable=True)
 
 # For debug
 # TODO check elements and subarrays
-        if not np.all(data == outdata):
+        if not np.array_equal(data, outdata):
             print("FAIL: get_array mismatch")
-            import pdb; pdb.set_trace()
-
-
-        if not np.all(data[0] == outvar[0]):
-            print("FAIL: get_var mismatch")
             import pdb; pdb.set_trace()
 
         subcount = 0
@@ -285,22 +287,24 @@ def ttest_random():
                 print("None array")
                 continue
 
+            #import pdb; pdb.set_trace()
             if len(subdata) > 0 and len(suboutdata) > 0 and len(suboutvar) > 0:
-                if not np.all(subdata == suboutdata):
+                if not np.array_equal(subdata, suboutdata):
                     
                     print("FAIL: (data, outdata)  mismatch")
                     import pdb; pdb.set_trace()
 
-                if not np.all(subdata == suboutvar):
+                if not np.array_equal(subdata, suboutvar):
                     print("FAIL: (data, outvar)  mismatch")
                     import pdb; pdb.set_trace()
 
-                if not np.all(suboutdata == suboutvar):
+                if not np.array_equal(suboutdata, suboutvar):
                     print("FAIL: (outdata, outvar)  mismatch")
                     import pdb; pdb.set_trace()
 
             subcount += 1
             
+        import pdb; pdb.set_trace()
         print("PASS")
 
         count += 1
@@ -310,7 +314,7 @@ def ttest_random():
             os.remove(slabfile)
 
 
-def ttest_failecases():
+def test_failecases():
     from multiprocessing import Process
 
     try:
@@ -327,42 +331,82 @@ def ttest_failecases():
         if ext != ".slab":
             continue
 
-        shape = [int(i) for i in basename.split("_")]
+        array_shape = [int(i) for i in basename.split("_")]
         #if shape != [1,6,4,3]: continue
         #if shape == [1,6,4,3]: import pdb; pdb.set_trace()
 
-        ndim = len(shape)
-        s1 = shape[1] // NPROCS
-        print("\nshape: %s" % str(shape))
+        ndim = len(array_shape)
+        s1 = array_shape[1] // NPROCS
+        print("\narray_shape: %s" % str(array_shape))
 
-        _data = np.arange(np.prod(shape[1:])).reshape(shape[1:])
-
-        if shape[0] > 1:
-           data = np.stack([_data] * shape[0])
-
-        else:
-            data = _data 
+        data = np.arange(np.prod(array_shape)).reshape(array_shape)
+#        _data = np.arange(np.prod(shape[1:])).reshape(shape[1:])
+#
+#        if shape[0] > 1:
+#           data = np.stack([_data] * shape[0])
+#
+#        else:
+#            data = _data 
 
         with pyslabs.open(slabfile) as slabs:
-            outvar = slabs.get_reader("ndata", pack_stack_dim=True)
-            outdata = slabs.get_array("ndata", pack_stack_dim=True)
+            outvar = slabs.get_reader("ndata", unstackable=True)
+            outdata = slabs.get_array("ndata", unstackable=True)
 
-        if not np.all(data == outdata):
-            #print("")
-            #where = np.where(data != outdata) 
-            #print(len(where), [len(i) for i in where])
-            #print(len(where), len(where[0]))
-            #import pdb; pdb.set_trace()
+        if not np.array_equal(data, outdata):
             print("FAIL: get_array mismatch")
-            assert False
-        else:
-            print("PASS: get_array match")
-
-        if not np.all(data[0] == outvar[0]):
             import pdb; pdb.set_trace()
-            print("FAIL: get_var mismatch")
-            assert False
-        else:
-            print("PASS: get_var match")
+
+        NSUBTESTS = 1000
+        subcount = 0
+        nzeros = 0
+        ntests = 0
+
+        while subcount < NSUBTESTS:
+
+            key = generate_randomkey(data.shape)
+
+            print("KEY: ", str(key))
+            subdata = data.__getitem__(key) 
+            suboutdata = outdata.__getitem__(key)
+            suboutvar = outvar.__getitem__(key)
+
+            if subdata.size == 0:
+                if ((hasattr(suboutvar, "size") and suboutvar.size != 0) or
+                    (not hasattr(suboutvar, "size") and len(suboutvar) != 0)):
+                    print("FAIL: Not all blank")
+                    import pdb; pdb.set_trace()
+                    
+                nzeros += 1
+            else:
+                if not np.array_equal(subdata, suboutdata):
+                    
+                    print("FAIL: (data, outdata)  mismatch")
+                    import pdb; pdb.set_trace()
+
+                if not np.array_equal(subdata, suboutvar):
+                    print("FAIL: (data, outvar)  mismatch")
+                    import pdb; pdb.set_trace()
+
+                if not np.array_equal(suboutdata, suboutvar):
+                    print("FAIL: (outdata, outvar)  mismatch")
+                    import pdb; pdb.set_trace()
+
+                ntests += 1
+            subcount += 1
+            
+        print("PASS", ntests, nzeros)
+
+#        count += 1
+#
+#        if not np.array_equal(data, outdata):
+#            #print("")
+#            #where = np.where(data != outdata) 
+#            #print(len(where), [len(i) for i in where])
+#            #print(len(where), len(where[0]))
+#            #import pdb; pdb.set_trace()
+#            print("FAIL: get_array mismatch")
+#            assert False
+#        else:
+#            print("PASS: get_array match")
 
 # TODO: random, stress test

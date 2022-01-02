@@ -482,6 +482,9 @@ class ParallelPyslabsWriterV1(PyslabsWriterV1):
 
         var_cfg = self.config["vars"][name]
 
+        if "autostack" in kwargs:
+            var_cfg["stack"]["auto"] = kwargs["autostack"]
+
         return VariableWriterV1(os.path.join(self.proc_path, name), var_cfg)
 
     def get_dim(self, name):
