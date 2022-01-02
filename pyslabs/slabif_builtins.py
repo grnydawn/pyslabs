@@ -52,11 +52,11 @@ def load(tar_file):
 def stack(stacker, lower):
 
     if stacker is None:
-        return type(lower)([lower])
+        try:
+            return type(lower)([lower])
 
-    if type(stacker) != type(lower):
-        raise PE_Stabif_Typemismatch("%s != %s" % (type(stacker).__name__,
-                                    type(lower).__name__))
+        except TypeError:
+            return (lower,)
 
     if isinstance(stacker, list):
         stacker.append(lower)

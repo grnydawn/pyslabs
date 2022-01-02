@@ -103,7 +103,7 @@ def ttest_list():
         assert myarr2 == [[35,36], [41,42]]
 
 
-def ttest_numpy():
+def test_numpy():
 
     try:
         import numpy as np
@@ -112,11 +112,13 @@ def ttest_numpy():
         print("No numpy module is fould. Test is skipped.")
         return
 
-    data = np.arange(100).reshape((5, 4, 5))
+    shape = (4, 5)
+    nwrites = 5
+    data = np.arange(100).reshape((nwrites,)+shape)
 
     with pyslabs.open(slabfile, "w") as slabs:
-        myvar = slabs.get_writer("myvar")
-        for i in range(5):
+        myvar = slabs.get_writer("myvar", shape, autostack=True)
+        for i in range(nwrites):
             myvar.write(data[i, :, :])
 
     assert os.path.isfile(slabfile)
@@ -133,7 +135,7 @@ def ttest_numpy():
         assert np.all(myarr2 == data[2, 1:4:2, 1:])
 
 
-def test_multiprocessing():
+def ttest_multiprocessing():
     from multiprocessing import Process
 
     slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")

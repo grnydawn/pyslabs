@@ -44,7 +44,7 @@ def writelist(myid):
     slabs.close()
 
 
-def ttest_serial():
+def test_serial():
 
     slabs = pyslabs.open(slabfile, workdir=workdir, mode="w")
 
@@ -101,10 +101,8 @@ def test_multiprocessing():
     slabs.close()
 
     slabs = pyslabs.open(slabfile, workdir=workdir, mode="r")
-    var = slabs.get_reader("test")
+    var = slabs.get_reader("test", unstackable=True)
     data = slabs.get_array("test")
-
-    var2 = var[1,:,:]
 
     slabs.close()
 
@@ -113,16 +111,9 @@ def test_multiprocessing():
     assert all([len(slab)==2 for slab in data[0]])
     assert data[NITER-1][NSIZE*NPROCS-1] == (NPROCS-1, NITER-1)
 
-    var3 = var[1,:,0]
-    assert var3 == list(np.asarray(data)[1,:,0])
-
-    var4 = var[1,0,:]
-    assert var4 == tuple(np.asarray(data)[1,0,:])
-
-    var5 = var[:,:,1]
-    assert np.array_equal(var5, list(np.asarray(data)[:,:,1]))
-
-    var6 = var[1:3,3:6,:]
-    import pdb; pdb.set_trace()
-    assert np.array_equal(var6, list(np.asarray(data)[1:3,3:6,:]))
+    assert np.array_equal(var[1,:,:], np.asarray(data)[1,:,:])
+    assert np.array_equal(var[1,:,0], np.asarray(data)[1,:,0])
+    assert np.array_equal(var[1,0,:], np.asarray(data)[1,0,:])
+    assert np.array_equal(var[:,:,1], np.asarray(data)[:,:,1])
+    assert np.array_equal(var[1:3,3:6,:], np.asarray(data)[1:3,3:6,:])
 

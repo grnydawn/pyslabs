@@ -141,12 +141,12 @@ class LocalDomain():
             self.hy_dens_theta_int[k] = hr * ht
             self.hy_pressure_int[k] = self.c0 * ((hr*ht)**self.gamma)
 
-        self.slabs = pyslabs.master_open(outfile, 1, workdir=workdir, mode="w")
+        self.slabs = pyslabs.master_open(outfile, mode="w", num_procs=1, workdir=workdir)
 
-        self.dens_writer = self.slabs.get_writer("dens")
-        self.umom_writer = self.slabs.get_writer("umom")
-        self.wmom_writer = self.slabs.get_writer("wmom")
-        self.rhot_writer = self.slabs.get_writer("rhot")
+        self.dens_writer = self.slabs.get_writer("dens", (self.nx, self.nz), autostack=True)
+        self.umom_writer = self.slabs.get_writer("umom", (self.nx, self.nz), autostack=True)
+        self.wmom_writer = self.slabs.get_writer("wmom", (self.nx, self.nz), autostack=True)
+        self.rhot_writer = self.slabs.get_writer("rhot", (self.nx, self.nz), autostack=True)
 
     def set_halo_values_z(self, state):
 

@@ -108,7 +108,10 @@ class PyslabsWriterV1(object):
 # master implementation of pyslabs 
 class MasterPyslabsWriterV1(PyslabsWriterV1):
 
-    def get_writer(self, name, slab_shape, array_shape=None):
+    def get_writer(self, name, slab_shape, array_shape=None, autostack=False, **kwargs):
+
+        if not slab_shape:
+            slab_shape = tuple()
 
         var_cfg = copy.deepcopy(INIT_VARCFG)
 
@@ -134,6 +137,9 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
 
         var_cfg["check"]["slab_shape"] = tuple(slab_shape)
         var_cfg["check"]["array_shape"] = tuple(array_shape)
+        var_cfg["stack"]["auto"] = autostack
+        var_cfg["attrs"].update(dict((k[5:],v) for k,v in kwargs.items() if
+                                k.startswith("attr_")))
 
         self.config["vars"][name] = var_cfg
 
@@ -472,7 +478,7 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
 # non-master implementation of pyslabs 
 class ParallelPyslabsWriterV1(PyslabsWriterV1):
 
-    def get_writer(self, name):
+    def get_writer(self, name, *vargs, **kwargs):
 
         var_cfg = self.config["vars"][name]
 

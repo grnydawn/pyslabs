@@ -40,11 +40,12 @@ def shape(slab):
 
 
 def dump(path, slab):
+    print("Slabif dump IN (path, slab): ", path, slab)
 
     atype, ext = arraytype(slab)
 
     if atype == "numpy":
-        out = npif.dump(slab, path)
+        out = npif.dump(path, slab)
 
     else:
         out = bif.dump(path, slab)
@@ -74,7 +75,7 @@ def load(tar_file, slab_info, atype):
 
 def stack(upper, lower):
 
-    atype, ext = arraytype(upper)
+    atype, ext = arraytype(lower)
 
     if atype == "numpy":
         array = npif.stack(upper, lower)
@@ -130,6 +131,8 @@ def get_slice(array, key):
 def get_column(tar_file, slab_tower, stack_key, slab_key):
 
 
+    print("Get_Column IN (slat_tower, stack_key, slab_key): ", slab_tower.keys(), stack_key, slab_key)
+
     #For a positive step, r[i] = start + step*i where i >= 0 and r[i] < stop.
     #For a negative step, r[i] = start + step*i, but the constraints are i >= 0 and r[i] > stop.
 
@@ -169,6 +172,7 @@ def get_column(tar_file, slab_tower, stack_key, slab_key):
     #if not is_slice:
     #    stacker = squeeze(stacker)
 
+    print("Get_Column Out (squeezed, stacker): ", False, stacker)
     return False, stacker
 
 def get_array(tar_file, slab_tower, shape, slab_key, stack_key, new_key=None):

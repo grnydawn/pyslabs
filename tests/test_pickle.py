@@ -49,7 +49,7 @@ def test_tuple():
     data1 = (4,5,6)
 
     with pyslabs.open(slabfile, mode="w") as slabs:
-        myvar = slabs.get_writer("myvar")
+        myvar = slabs.get_writer("myvar", (3,), autostack=True)
         myvar.write(data0)
         myvar.write(data1)
 

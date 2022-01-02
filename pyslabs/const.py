@@ -41,10 +41,13 @@ INIT_CONFIG = {
 INIT_VARCFG = {
     "writes": {},
     "shape": None,
-    "check": {}
+    "check": {},
+    "attrs": {},
+    "stack": {}
 }
 
 INIT_DIMCFG = {
+    "attrs": {}
 }
 
 

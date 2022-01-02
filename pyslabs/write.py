@@ -16,6 +16,7 @@ class VariableWriterV1():
         self.path = path
         self.config = config
         self.check_shape = config["check"]["slab_shape"]
+        self.auto_stack = config["stack"]["auto"]
         self.level = 0
 
     def stacking(self, nlevel=1):
@@ -55,14 +56,14 @@ class VariableWriterV1():
         for _s in start:
             rel_path.append(str(_s))
 
-        level = str(self.level) if level is None else str(level)
+        strlevel = str(self.level) if level is None else str(level)
 
-        if level in self.config["writes"]:
-            writes = self.config["writes"][level]
+        if strlevel in self.config["writes"]:
+            writes = self.config["writes"][strlevel]
 
         else:
             writes = {}
-            self.config["writes"][level] = writes
+            self.config["writes"][strlevel] = writes
 
         writes["/".join(rel_path)] = (start, slab_shape)
 
@@ -72,9 +73,16 @@ class VariableWriterV1():
             os.makedirs(slab_folder)
 
         atype, ext = arraytype(slab)
-        slab_path = os.path.join(slab_folder, ".".join([level, atype, ext]))
+        slab_path = os.path.join(slab_folder, ".".join([strlevel, atype, ext]))
 
         if os.path.isfile(slab_path):
             raise PE_Write_Duplicateslabfile(slab_path)
 
         slabif.dump(slab_path, slab)
+
+        if level is None:
+            if self.auto_stack is True:
+                self.stacking()
+
+            elif self.auto_stack > 0:
+                self.stacking(nlevel=self.auto_stack)

@@ -17,7 +17,14 @@ class VariableReaderV1():
         self.unstackable = unstackable
         self.array_shape = tuple(self.var_cfg["shape"])
         self.start = (0,) * len(self.array_shape)
-        self.shape = tuple(self.array_shape)
+        shape = []
+        for s in self.array_shape:
+            if s in self.dim_cfg:
+                shape.append(self.dim_cfg[s]["length"])
+
+            else:
+                shape.append(s)
+        self.shape = tuple(shape)
 
     def _get_slice(self, dim, st, so, se):
 
@@ -33,8 +40,8 @@ class VariableReaderV1():
     def __getitem__(self, key):
 
         # handle unstackable
-        if self.unstackable and self.shape[0] == 1:
-            key = (0, key)
+        #if self.unstackable and self.shape[0] == 1:
+        #    key = (0, key)
 
         whole = tuple([self._get_slice(dim, None, None, None)
                       for dim in range(len(self.shape))])
@@ -65,16 +72,21 @@ class VariableReaderV1():
 
             else:
                 key = tuple(buf)
+#
+#        shape = []
+#        for s in self.shape[1:]:
+#            if s in self.dim_cfg:
+#                shape.append(self.dim_cfg[s]["length"])
+#
+#            else:
+#                shape.append(s)
 
-        shape = []
-        for s in self.shape[1:]:
-            if s in self.dim_cfg:
-                shape.append(self.dim_cfg[s]["length"])
-
-            else:
-                shape.append(s)
-
-        is_squeezed, array = slabif.get_array(self.tar_file, self.slab_tower, shape,
+        is_squeezed, array = slabif.get_array(self.tar_file, self.slab_tower, self.shape[1:],
                                         key[1:], key[0])
 
-        return array
+        if self.unstackable and not is_slice and len(array) == 1:
+            return array[0]
+
+        else:
+            return array
+
