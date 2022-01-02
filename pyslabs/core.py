@@ -16,6 +16,7 @@ from pyslabs.const import (SLAB_EXT, ZLAB_EXT, TMP_BEGIN, TMP_WORK, INIT_BEGIN,
                            INIT_CONFIG, INIT_VARCFG, INIT_DIMCFG, CONFIG_FILE,
                            FINISH_FILE, INIT_TIMEOUT, FINI_TIMEOUT, VARCFG_FILE,
                            UNLIMITED)
+from pyslabs.error import PE_Begin_Numproc
 from pyslabs.util import pickle_dump, clean_folder
 from pyslabs.write import VariableWriterV1
 from pyslabs.read import VariableReaderV1
@@ -65,6 +66,9 @@ class Dimension():
     def check(self, length):
 
         mylen = self.config["length"]
+
+        if mylen is None:
+            return True
 
         if length <  0 or (mylen != UNLIMITED and mylen != length):
             return False
@@ -125,11 +129,12 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
 
         for i, s in enumerate(slab_shape):
             dim = (s if isinstance(s, Dimension) else
-                self.define_dim("dim%d"%(i+1), int(s)))
+                self.define_dim("dim%d"%(i+1), None))
             array_shape.append(dim)
 
         var_cfg["check"]["slab_shape"] = tuple(slab_shape)
         var_cfg["check"]["array_shape"] = tuple(array_shape)
+
         self.config["vars"][name] = var_cfg
 
         return VariableWriterV1(os.path.join(self.proc_path, name), var_cfg)
@@ -145,7 +150,7 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
 
         if points is not None:
             _length = len(points)
-            if _length != length:
+            if length is not None and _length != length:
                 raise Exception("Dimension '%s' length mismatch: %d != %d" %
                                 (name, length, _length))
 
@@ -189,7 +194,7 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
         start = time.time()
         num_procs = self.config["_control_"]["num_procs"]
 
-        while time.time() - start < _MAX_OPEN_WAIT:
+        while time.time() - start < INIT_TIMEOUT:
 
             procs.clear()
 
@@ -401,28 +406,16 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
             start[var_name], shape[var_name] = _scan(0, var_info["start"], slab_shape)
             shape[var_name] = [shape[var_name][-1]] + shape[var_name][:-1]
 
-            if "array_shape" in var_info["config"][0]["check"]:
-                array_shape = var_info["config"][0]["check"]["array_shape"]
+            for idx, sh in enumerate(var_info["config"][0]["check"]["array_shape"]):
 
-                if isinstance(array_shape, StackDimension):
-                    dim_cfg = self.config["dims"][array_shape.name]
+                dim_cfg = self.config["dims"][sh.name]
 
-                    if dim_cfg["length"] == UNLIMITED:
-                        dim_cfg["length"] = shape[var_name][0]
+                if dim_cfg["length"] is None or dim_cfg["length"] == UNLIMITED:
+                    dim_cfg["length"] = shape[var_name][idx]
 
-                    elif dim_cfg["length"] != shape[var_name][0]:
-                        raise PE_Close_Stackdimmismatch("%d != %d" %
-                            (dim_cfg["length"], shape[var_name][0]))
-
-                elif len(array_shape) > 0 and isinstance(array_shape[0], StackDimension):
-                    dim_cfg = self.config["dims"][array_shape[0].name]
-
-                    if dim_cfg["length"] == UNLIMITED:
-                        dim_cfg["length"] = shape[var_name][0]
-
-                    elif dim_cfg["length"] != shape[var_name][0]:
-                        raise PE_Close_Stackdimmismatch("%d != %d" %
-                            (dim_cfg["length"], shape[var_name][0]))
+                elif dim_cfg["length"] != shape[var_name][idx]:
+                    raise PE_Close_Stackdimmismatch("%d != %d" %
+                        (dim_cfg["length"], shape[var_name][idx]))
 
         for name, var_cfg in self.config["vars"].items():
 
@@ -483,7 +476,7 @@ class ParallelPyslabsWriterV1(PyslabsWriterV1):
 
         var_cfg = self.config["vars"][name]
 
-        return VariableWriterV1(os.path.join(self.path, name), var_cfg)
+        return VariableWriterV1(os.path.join(self.proc_path, name), var_cfg)
 
     def get_dim(self, name):
 
@@ -722,9 +715,10 @@ def parallel_open(slab_path, mode="w"):
 
     if mode == "w":
 
-        _, begin_path, _ = _write_paths(slab_path, workdir)
+        _, begin_path, _ = _write_paths(slab_path, None)
 
         start = time.time()
+        begin = None
         work_path = None
 
         while time.time() - start < INIT_TIMEOUT:
@@ -739,7 +733,7 @@ def parallel_open(slab_path, mode="w"):
             raise PE_Init_Nobeginfile(slab_path)
 
         while time.time() - start < INIT_TIMEOUT:
-            cfg_path = os.path.join(work_path, INIT_CONFIG)
+            cfg_path = os.path.join(work_path, CONFIG_FILE)
 
             if not os.path.isfile(cfg_path):
                 time.sleep(0.1)
@@ -747,6 +741,8 @@ def parallel_open(slab_path, mode="w"):
 
             with io.open(cfg_path, "rb") as fp:
                 config = pickle.load(fp)
+
+            break
 
         return ParallelPyslabsWriterV1(work_path, config)
 

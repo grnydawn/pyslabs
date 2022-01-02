@@ -3,7 +3,7 @@
 
 """
 
-import os, io, pickle, itertools
+import os, io, pickle, itertools, pprint
 
 from pyslabs.util import arraytype
 from collections import OrderedDict
@@ -85,17 +85,29 @@ def stack(upper, lower):
     return array
 
 
+def concatenate(concater, panel, axis):
+
+    atype, ext = arraytype(concater)
+
+    if atype == "numpy":
+        array = npif.concatenate(concater, panel, axis)
+
+    else:
+        array = bif.concatenate(concater, panel, axis)
+
+    return array
+
 def squeeze(array):
 
     atype, ext = arraytype(array)
 
     if atype == "numpy":
-        sq= npif.squeeze(array)
+        is_sq, sq= npif.squeeze(array)
 
     else:
-        sq = bif.squeeze(array)
+        is_sq, sq = bif.squeeze(array)
 
-    return sq
+    return is_sq, sq
 
 
 # slice of array
@@ -154,17 +166,20 @@ def get_column(tar_file, slab_tower, stack_key, slab_key):
         import pdb; pdb.set_trace()
         print(err)
 
-    if not is_slice:
-        stacker = squeeze(stacker)
+    #if not is_slice:
+    #    stacker = squeeze(stacker)
 
-    return stacker
+    return False, stacker
 
 def get_array(tar_file, slab_tower, shape, slab_key, stack_key, new_key=None):
-
-    new_key = list() if new_key is None else list(new_key)
+    print("\nGet_array IN(tower, shape, slab_key, stack_key, new_key): ", slab_tower.keys(), shape, slab_key, stack_key, new_key)
 
     if len(slab_key) == 0:
-        return get_column(tar_file, slab_tower, stack_key, new_key)
+        is_squeezed, column =  get_column(tar_file, slab_tower, stack_key, new_key)
+        print("Get_array Column: \n")
+        pprint.pprint(column)
+
+        return is_squeezed, column
 
     cidxes = sorted([int(k) for k in slab_tower.keys()])
 
@@ -212,17 +227,36 @@ def get_array(tar_file, slab_tower, shape, slab_key, stack_key, new_key=None):
 
         offset = (ckey.step - (b - a) % ckey.step) % ckey.step
 
-        new_key += [slice(a, b, ckey.step)]
+        next_key = list() if new_key is None else list(new_key)
 
-        panel = get_array(tar_file, sub_tower, shape[1:],
-                                slab_key[1:], stack_key, new_key)
+        if is_slice:
+            last_key = slice(a, b, ckey.step)
+
+        else:
+            lslice = [s for s in range(a, b, ckey.step)]
+            if len(lslice) == 1:
+                last_key = lslice[0]
+
+            else:
+                raise PE_Slabif_Wrongslicing()
+
+        next_key.append(last_key)
+
+        is_squeezed, panel = get_array(tar_file, sub_tower, shape[1:],
+                                slab_key[1:], stack_key, next_key)
         if concater is None:
             concater = panel
 
         else:
-            concater = concatenate(concater, panel)
+            axis = (len(next_key)-1) if is_squeezed else len(next_key)
+            print("Slab Key, next_key, axis: ", slab_key[1:], next_key, axis)
+            concater = concatenate(concater, panel, axis)
+
+    is_squeezed = False
 
     if not is_slice:
-        concater = squeeze(concater)
+        print("TYPE: ", type(concater).__name__)
+        is_squeezed, concater = squeeze(concater)
 
-    return concater
+    print("Get_array OUT: ", concater)
+    return is_squeezed, concater

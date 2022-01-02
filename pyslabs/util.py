@@ -4,11 +4,31 @@
 
 import os, io, pickle, shutil
 
+from pyslabs.error import PE_Util_Typemismatch
+
 
 supported_array_types = {
     "numpy": (lambda a: (type(a).__name__=="ndarray" and
                         type(a).__module__== "numpy"), "npy")
 }
+
+
+class ScalarList():
+
+    def __init__(self, elems=None, type=type(None)):
+
+        self._list = list(elems)
+        self._type = type
+
+    def concat(self, elem):
+
+        self._list.append(elem)
+
+        if self._type is type(None):
+            self._type = type(elem)
+
+        elif self._type is not type(elem):
+            raise PE_Util_Typemismatch("%s != %s" % (self._type, type(elem)))
 
 
 def arraytype(slab):

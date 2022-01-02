@@ -39,7 +39,18 @@ class PE_Close_Unknowncheck(Pyslabs_Error):
     pass
 
 
-class PE_Write_Duplicateslabfil(Pyslabs_Error):
+class PE_Write_Duplicateslabfile(Pyslabs_Error):
     pass
 
+
+class PE_Read_Exeedlength(Pyslabs_Error):
+    pass
+
+
+class PE_Stabif_Typemismatch(Pyslabs_Error):
+    pass
+
+
+class PE_Util_Typemismatch(Pyslabs_Error):
+    pass
 

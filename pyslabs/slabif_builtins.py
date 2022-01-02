@@ -5,6 +5,9 @@
 
 import os, io, pickle, itertools
 
+from pyslabs.error import PE_Stabif_Typemismatch
+from pyslabs.util import ScalarList
+
 def length(slab, axis=0):
     import pdb; pdb.set_trace()
 
@@ -67,16 +70,75 @@ def stack(stacker, lower):
     return stacker
 
 
-def squeeze(array):
+def concatenate(concater, panel, axis):
+    print("Concatenate IN (concat, panel, axis): ", concater, panel, axis)
 
-    if isinstance(array, (list, tuple)):
+    from pyslabs import slabif
+
+    if concater is None:
+        return panel
+
+    if type(concater) != type(panel) and not isinstance(concater, ScalarList):
+        raise PE_Stabif_Typemismatch("%s != %s" % (type(concater).__name__,
+                                    type(panel).__name__))
+
+    if isinstance(concater, ScalarList):
+        concater.concat(panel)
+
+    elif isinstance(concater, list):
+        if axis > 0:
+            if len(concater) != len(panel):
+                raise PE_Stabif_Lengthmismatch("%d != %d" % (len(concater),
+                                        len(panel)))
+            buf = []
+            for idx in range(len(concater)):
+                buf.append(slabif.concatenate(concater[idx], panel[idx], axis=axis-1))
+            concater = buf 
+
+        else:
+            concater.extend(panel)
+
+    elif isinstance(concater, tuple):
+        if axis > 0:
+            if len(concater) != len(panel):
+                raise PE_Stabif_Lengthmismatch("%d != %d" % (len(concater),
+                                        len(panel)))
+            buf = []
+            for idx in range(len(concater)):
+                buf.append(slabif.concatenate(concater[idx], panel[idx], axis=axis-1))
+            concater = tuple(buf) 
+
+        else:
+            concater += panel
+
+    else:
+        if axis > 0:
+            raise PE_Stabif_Wrongaxis()
+
+        concater = ScalarList((concater, panel))
+
+
+    print("Concatenate OUT: ", concater)
+    return concater
+
+
+
+def squeeze(array):
+    print("Squeeze IN: ", array)
+
+    is_squeezed = False
+
+    if isinstance(array, (list, tuple, ScalarList)):
         if len(array) == 1:
             array = array[0]
+            is_squeezed = True
 
     else:
         import pdb; pdb.set_trace()        
 
-    return array
+    print("Squeeze OUT(array, is_squeezed): ", array, is_squeezed)
+
+    return is_squeezed, array
 
 
 def get_slice(slab, key):
@@ -106,7 +168,7 @@ def get_slice(slab, key):
         else:
             buf.append(item)
 
-    if not is_slice and len(buf) == 1:
+    if not is_slice:
         return buf[0]
 
     else:

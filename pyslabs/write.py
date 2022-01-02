@@ -6,7 +6,7 @@
 import os
 from pyslabs import slabif
 from pyslabs.util import arraytype
-from pyslabs.error import PE_Slab_Shapemismatch
+from pyslabs.error import PE_Slab_Shapemismatch, PE_Write_Duplicateslabfile
 
 
 class VariableWriterV1():

@@ -1,5 +1,6 @@
 import os, shutil, pytest
 import pyslabs
+import numpy as np
 
 here = os.path.dirname(__file__)
 prjdir = os.path.join(here, "workdir")
@@ -33,14 +34,17 @@ def writelist(myid):
     slabs = pyslabs.parallel_open(slabfile, mode="w")
     testvar = slabs.get_writer("test")
 
+    slabs.begin()
+
     for i in range(NITER):
         mylist = [(myid, i)]*NSIZE
-        testvar.write(mylist, (myid*NSIZE, 0), shape=(NSIZE, 2))
+        testvar.write(mylist, start=(myid*NSIZE, 0))
+        testvar.stacking()
 
     slabs.close()
 
 
-def test_serial():
+def ttest_serial():
 
     slabs = pyslabs.open(slabfile, workdir=workdir, mode="w")
 
@@ -69,10 +73,12 @@ def test_serial():
     assert all([slab==(0,1) for slab in subdata])
 
 
-def ttest_multiprocessing():
+def test_multiprocessing():
     from multiprocessing import Process
 
-    slabs = pyslabs.master_open(slabfile, NPROCS, mode="w")
+    slabs = pyslabs.master_open(slabfile, mode="w", num_procs=NPROCS)
+
+    testvar = slabs.get_writer("test", (NSIZE, 2))
 
     procs = []
 
@@ -81,13 +87,13 @@ def ttest_multiprocessing():
         p.start()
         procs.append(p)
 
-    testvar = slabs.get_writer("test", shape=(NITER, NSIZE*NPROCS, 2))
-
+    # should be located after child processes began
     slabs.begin()
 
     for i in range(NITER):
         mylist = [(0, i)]*NSIZE
-        testvar.write(mylist, (0, 0), shape=(NSIZE, 2))
+        testvar.write(mylist, start=(0, 0))
+        testvar.stacking()
 
     for i in range(NPROCS-1):
         procs[i].join()
@@ -106,3 +112,17 @@ def ttest_multiprocessing():
     assert all([len(slab)==NSIZE*NPROCS for slab in data])
     assert all([len(slab)==2 for slab in data[0]])
     assert data[NITER-1][NSIZE*NPROCS-1] == (NPROCS-1, NITER-1)
+
+    var3 = var[1,:,0]
+    assert var3 == list(np.asarray(data)[1,:,0])
+
+    var4 = var[1,0,:]
+    assert var4 == tuple(np.asarray(data)[1,0,:])
+
+    var5 = var[:,:,1]
+    assert np.array_equal(var5, list(np.asarray(data)[:,:,1]))
+
+    var6 = var[1:3,3:6,:]
+    import pdb; pdb.set_trace()
+    assert np.array_equal(var6, list(np.asarray(data)[1:3,3:6,:]))
+
