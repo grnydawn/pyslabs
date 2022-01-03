@@ -5,7 +5,7 @@
 
 import os, io, pickle, itertools, pprint
 
-from pyslabs.util import arraytype
+from pyslabs.util import arraytype, DEBUG_LEVEL, DEBUG_INFO, DEBUG_MAJOR
 from collections import OrderedDict
 import pyslabs.slabif_numpy as npif
 import pyslabs.slabif_builtins as bif
@@ -15,18 +15,24 @@ _cache = OrderedDict()
 
 def length(slab, axis=0):
 
+    if slab is None:
+        return 0
+
     atype, ext = arraytype(slab)
 
     if atype == "numpy":
-        l = npif.length(slab, axis=dim)
+        l = npif.length(slab, axis=axis)
 
     else:
-        l = bif.shape(slab, axis=dim)
+        l = bif.length(slab, axis=axis)
 
     return l
 
 
 def shape(slab):
+
+    if slab is None:
+        return tuple()
 
     atype, ext = arraytype(slab)
 
@@ -39,8 +45,17 @@ def shape(slab):
     return sp
 
 
+def ndim(slab):
+
+    if slab is None:
+        return 0
+
+    return len(shape(slab))
+
+
 def dump(path, slab):
-    print("Slabif dump IN (path, slab): ", path, slab)
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Slabif dump IN (path, slab): ", path, slab)
 
     atype, ext = arraytype(slab)
 
@@ -73,6 +88,22 @@ def load(tar_file, slab_info, atype):
     return _cache[path]
 
 
+def expand_dim(slab):
+
+    if slab is None:
+        return slab
+
+    atype, ext = arraytype(slab)
+
+    if atype == "numpy":
+        array = npif.expand_dim(slab)
+
+    else:
+        array = bif.expand_dim(slab)
+
+    return array
+
+
 def stack(upper, lower):
 
     atype, ext = arraytype(lower)
@@ -85,7 +116,8 @@ def stack(upper, lower):
             array = bif.stack(upper, lower)
     except Exception as err:
         import pdb; pdb.set_trace()
-        print(err)
+        if DEBUG_LEVEL > DEBUG_MAJOR:
+            print(err)
 
     return array
 
@@ -94,15 +126,11 @@ def concatenate(concater, panel, axis):
 
     atype, ext = arraytype(concater)
 
-    try:
-        if atype == "numpy":
-            array = npif.concatenate(concater, panel, axis)
+    if atype == "numpy":
+        array = npif.concatenate(concater, panel, axis)
 
-        else:
-            array = bif.concatenate(concater, panel, axis)
-    except Exception as err:
-        import pdb; pdb.set_trace()
-        print(err)
+    else:
+        array = bif.concatenate(concater, panel, axis)
 
     return array
 
@@ -150,7 +178,8 @@ def get_blank(atype):
 def get_column(tar_file, slab_tower, stack_key, slab_key):
 
 
-    print("Get_Column IN (slat_tower, stack_key, slab_key): ", slab_tower.keys(), stack_key, slab_key)
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Get_Column IN (slat_tower, stack_key, slab_key): ", slab_tower.keys(), stack_key, slab_key)
 
     #For a positive step, r[i] = start + step*i where i >= 0 and r[i] < stop.
     #For a negative step, r[i] = start + step*i, but the constraints are i >= 0 and r[i] > stop.
@@ -190,7 +219,8 @@ def get_column(tar_file, slab_tower, stack_key, slab_key):
 
     stacker = None
 
-    print("Gen_Column itertool islice: ", stack_slice)
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Gen_Column itertool islice: ", stack_slice)
 
     for key in itertools.islice(keys, stack_slice.start, stack_slice.stop,
                                 stack_slice.step):
@@ -209,27 +239,30 @@ def get_column(tar_file, slab_tower, stack_key, slab_key):
     #if not is_slice:
     #    stacker = squeeze(stacker)
 
-    print("Get_Column Out (squeezed, stacker): ", False, stacker)
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Get_Column Out (squeezed, stacker): ", False, stacker)
     return False, stacker
 
-def get_array(tar_file, slab_tower, shape, slab_key, stack_key, new_key=None):
-    print("\nGet_array IN(tower, shape, slab_key, stack_key, new_key): ", slab_tower.keys(), shape, slab_key, stack_key, new_key)
+def get_array(tar_file, slab_tower, slab_shape, slab_key, stack_key, new_key=None):
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("\nGet_array IN(tower, slab_shape, slab_key, stack_key, new_key): ", slab_tower.keys(), slab_shape, slab_key, stack_key, new_key)
 
     if len(slab_key) == 0:
         is_squeezed, column =  get_column(tar_file, slab_tower, stack_key, new_key)
-        print("Get_array Column: \n")
-        pprint.pprint(column)
+        if DEBUG_LEVEL > DEBUG_INFO:
+            print("Get_array Column: \n")
+            pprint.pprint(column)
 
         return is_squeezed, column
 
     cidxes = sorted([int(k) for k in slab_tower.keys()])
-    nidxes = list(cidxes)[1:] + [shape[0]]
+    nidxes = list(cidxes)[1:] + [slab_shape[0]]
 
     if isinstance(slab_key[0], int):
         is_slice = False
         k0 = slab_key[0]
         if k0 < 0:
-            k0st = shape[0] + k0
+            k0st = slab_shape[0] + k0
             ckey = slice(k0st, k0st+1, 1)
 
         else:
@@ -238,9 +271,9 @@ def get_array(tar_file, slab_tower, shape, slab_key, stack_key, new_key=None):
     else:
         is_slice = True
         st = slab_key[0].start
-        if st < 0: st = st + shape[0]
+        if st < 0: st = st + slab_shape[0]
         so = slab_key[0].stop
-        if so < 0: so = so + shape[0]
+        if so < 0: so = so + slab_shape[0]
         se = slab_key[0].step
         if se < 0:
             raise PE_Slabif_Negativestep()
@@ -296,25 +329,28 @@ def get_array(tar_file, slab_tower, shape, slab_key, stack_key, new_key=None):
 
         next_key.append(last_key)
 
-        is_squeezed, panel = get_array(tar_file, sub_tower, shape[1:],
+        is_squeezed, panel = get_array(tar_file, sub_tower, slab_shape[1:],
                                 slab_key[1:], stack_key, next_key)
         if concater is None:
             concater = panel
 
         else:
             axis = (len(next_key)-1) if is_squeezed else len(next_key)
-            print("Slab Key, next_key, axis: ", slab_key[1:], next_key, axis)
+            if DEBUG_LEVEL > DEBUG_INFO:
+                print("Slab Key, next_key, axis: ", slab_key[1:], next_key, axis)
             concater = concatenate(concater, panel, axis)
 
-    is_squeezed = False
+    is_squeezed_final = False
 
     if not is_slice:
-        print("TYPE: ", type(concater).__name__)
+        if DEBUG_LEVEL > DEBUG_INFO:
+            print("TYPE: ", type(concater).__name__)
         if concater is None: import pdb; pdb.set_trace()
-        is_squeezed, concater = squeeze(concater)
+        is_squeezed_final, concater = squeeze(concater)
 
     if concater is None:
         concater = get_blank(atype)
 
-    print("Get_array OUT: ", concater)
-    return is_squeezed, concater
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Get_array OUT: ", concater)
+    return is_squeezed_final, concater

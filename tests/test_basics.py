@@ -58,8 +58,8 @@ def test_serial():
     slabs.close()
 
     slabs = pyslabs.master_open(slabfile, "r", workdir=workdir)
-    reader = slabs.get_reader("test", unstackable=True)
-    data = slabs.get_array("test", unstackable=True)
+    reader = slabs.get_reader("test")
+    data = slabs.get_array("test")
     slabs.close()
 
     assert len(data) == NITER
@@ -101,7 +101,7 @@ def test_multiprocessing():
     slabs.close()
 
     slabs = pyslabs.open(slabfile, workdir=workdir, mode="r")
-    var = slabs.get_reader("test", unstackable=True)
+    var = slabs.get_reader("test")
     data = slabs.get_array("test")
 
     slabs.close()

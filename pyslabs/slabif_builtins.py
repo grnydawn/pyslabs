@@ -6,10 +6,11 @@
 import os, io, pickle, itertools
 
 from pyslabs.error import PE_Stabif_Typemismatch
-from pyslabs.util import ScalarList
+from pyslabs.util import ScalarList, DEBUG_LEVEL, DEBUG_INFO
 
 def length(slab, axis=0):
-    import pdb; pdb.set_trace()
+
+    return len(slab)
 
 
 def slice2type(_slice, _type):
@@ -70,11 +71,19 @@ def stack(stacker, lower):
     return stacker
 
 
+def expand_dim(array):
+
+    return type(array)([array])
+
+
 def get_blank():
     return tuple()
 
+
 def concatenate(concater, panel, axis):
-    print("Concatenate IN (concat, panel, axis): ", concater, panel, axis)
+
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Concatenate IN (concat, panel, axis): ", concater, panel, axis)
 
     from pyslabs import slabif
 
@@ -121,13 +130,15 @@ def concatenate(concater, panel, axis):
         concater = ScalarList((concater, panel))
 
 
-    print("Concatenate OUT: ", concater)
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Concatenate OUT: ", concater)
     return concater
 
 
 
 def squeeze(array):
-    print("Squeeze IN: ", array)
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Squeeze IN: ", array)
 
     is_squeezed = False
 
@@ -139,7 +150,8 @@ def squeeze(array):
     else:
         import pdb; pdb.set_trace()        
 
-    print("Squeeze OUT(array, is_squeezed): ", array, is_squeezed)
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Squeeze OUT(array, is_squeezed): ", array, is_squeezed)
 
     return is_squeezed, array
 

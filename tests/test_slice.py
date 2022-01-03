@@ -35,17 +35,27 @@ def generate_randomkey(shape):
     key = []
     for length in shape[:random.randrange(1, max(1, len(shape)))]:
 
+        size = 0
+
         for _ in range(100):
             nwrites = random.randint(1, 5)
 
             start = random.randrange(-length, length)
             stop = random.randrange(start, length)
             step = random.randrange(1, max(2, int((stop-start)/2)))
-                
-            if len([e for e in range(start, stop, step)]) != 0:
+
+            size = len([e for e in range(start, stop, step)])
+            if size != 0:
                 break
 
-        key.append(slice(start, stop, step))
+        if size == 1:
+            if stop % 2 == 0:
+                key.append(slice(start, stop, step))
+
+            else:
+                key.append(start)
+        else:        
+            key.append(slice(start, stop, step))
 
     return tuple(key)
 
@@ -73,7 +83,7 @@ def writenumpy(myid, pdata, start, nwrites):
     slabs.close()
 
 
-def ttest_list():
+def test_list():
        
     data0 = [[ 1, 2, 3], [ 4, 5, 6], [ 7, 8, 9], [10,11,12], [13,14,15]]
     data1 = [[16,17,18], [19,20,21], [22,23,24], [25,26,27], [28,29,30]]
@@ -82,7 +92,7 @@ def ttest_list():
     data4 = [[61,62,63], [64,65,66], [67,68,69], [70,71,72], [73,74,75]]
 
     with pyslabs.open(slabfile, "w") as slabs:
-        myvar = slabs.get_writer("myvar")
+        myvar = slabs.get_writer("myvar", (5,3), autostack=True)
         myvar.write(data0)
         myvar.write(data1)
         myvar.write(data2)
@@ -103,7 +113,7 @@ def ttest_list():
         assert myarr2 == [[35,36], [41,42]]
 
 
-def ttest_numpy():
+def test_numpy():
 
     try:
         import numpy as np
@@ -135,7 +145,7 @@ def ttest_numpy():
         assert np.all(myarr2 == data[2, 1:4:2, 1:])
 
 
-def ttest_multiprocessing():
+def test_multiprocessing():
     from multiprocessing import Process
 
     slabs = pyslabs.master_open(slabfile, mode="w", num_procs=NPROCS)
@@ -162,7 +172,7 @@ def ttest_multiprocessing():
     slabs.close()
 
     slabs = pyslabs.open(slabfile, workdir=workdir, mode="r")
-    var = slabs.get_reader("test", unstackable=True)
+    var = slabs.get_reader("test")
     data = slabs.get_array("test")
 
     data1 = data[1]
@@ -178,7 +188,7 @@ def ttest_multiprocessing():
     slabs.close()
 
 
-def ttest_random():
+def test_random():
     from multiprocessing import Process
 
     try:
@@ -188,8 +198,8 @@ def ttest_random():
         print("No numpy module is fould. Test is skipped.")
         return
 
-    NTESTS = 300
-    NSUBTESTS = 300
+    NTESTS = 10
+    NSUBTESTS = 100
     count = 0
 
     while (count < NTESTS):
@@ -210,11 +220,11 @@ def ttest_random():
         proc_shape = tuple(proc_shape)
         array_shape = (nwrites,) + proc_shape
 
-        print("")
-        print("SLAB SHAPE: %s" % str(slab_shape))
-        print("PROC SHAPE: %s" % str(proc_shape))
-        print("ARRAY SHAPE: %s" % str(array_shape))
-        print("NWRITES: %s" % str(nwrites))
+#        print("")
+#        print("SLAB SHAPE: %s" % str(slab_shape))
+#        print("PROC SHAPE: %s" % str(proc_shape))
+#        print("ARRAY SHAPE: %s" % str(array_shape))
+#        print("NWRITES: %s" % str(nwrites))
 
         # for generating particular shape
         #shape = [3,5]
@@ -260,12 +270,15 @@ def ttest_random():
 
         slabs.close()
 
-        with pyslabs.open(slabfile) as slabs:
-            outvar = slabs.get_reader("ndata", unstackable=True)
-            outdata = slabs.get_array("ndata", unstackable=True)
+        slabs =  pyslabs.open(slabfile)
+#        outvar = slabs.get_reader("ndata")
+        outdata = slabs.get_array("ndata")
 
 # For debug
 # TODO check elements and subarrays
+        #if len(data) == 1:
+        #    data = data[0]
+
         if not np.array_equal(data, outdata):
             print("FAIL: get_array mismatch")
             import pdb; pdb.set_trace()
@@ -276,35 +289,48 @@ def ttest_random():
 
             key = generate_randomkey(data.shape)
 
-            print("KEY: ", str(key))
-            subdata = data.__getitem__(key) 
-            suboutdata = outdata.__getitem__(key)
-            suboutvar = outvar.__getitem__(key)
+            subdata = data.__getitem__(key[0]) 
+            suboutdata = slabs.get_array("ndata", stack=key[0])
 
-            if subdata is None or suboutdata is None or suboutvar is None:
+            #print("KEY: ", str(key))
+            #subdata = data.__getitem__(key) 
+            #suboutdata = outdata.__getitem__(key)
+           #suboutvar = outvar.__getitem__(key)
 
-                subcount += 1
-                print("None array")
-                continue
+#            if subdata is None or suboutdata is None or suboutvar is None:
+#
+#                subcount += 1
+#                print("None array")
+#                continue
 
             #import pdb; pdb.set_trace()
-            if len(subdata) > 0 and len(suboutdata) > 0 and len(suboutvar) > 0:
+            if subdata.size > 0:
                 if not np.array_equal(subdata, suboutdata):
                     
                     print("FAIL: (data, outdata)  mismatch")
                     import pdb; pdb.set_trace()
 
-                if not np.array_equal(subdata, suboutvar):
-                    print("FAIL: (data, outvar)  mismatch")
-                    import pdb; pdb.set_trace()
-
-                if not np.array_equal(suboutdata, suboutvar):
-                    print("FAIL: (outdata, outvar)  mismatch")
-                    import pdb; pdb.set_trace()
+#                if subdata.shape != suboutvar.shape:
+#                    if subdata.shape == (1,)+suboutvar.shape:
+#                        print("FAIL 1 VAR")
+#                    elif (1,)+subdata.shape == suboutvar.shape:
+#                        print("FAIL 1 DATA")
+#                    else:
+#                        print("FAIL")
+#                        import pdb; pdb.set_trace()
+#                if not np.array_equal(subdata, suboutvar):
+#                    print("FAIL: (data, outvar)  mismatch")
+#                    import pdb; pdb.set_trace()
+#
+#                if not np.array_equal(suboutdata, suboutvar):
+#                    print("FAIL: (outdata, outvar)  mismatch")
+#                    import pdb; pdb.set_trace()
 
             subcount += 1
             
-        import pdb; pdb.set_trace()
+
+        slabs.close()
+        #import pdb; pdb.set_trace()
         print("PASS")
 
         count += 1
@@ -314,7 +340,7 @@ def ttest_random():
             os.remove(slabfile)
 
 
-def test_failecases():
+def ttest_failecases():
     from multiprocessing import Process
 
     try:
@@ -340,17 +366,10 @@ def test_failecases():
         print("\narray_shape: %s" % str(array_shape))
 
         data = np.arange(np.prod(array_shape)).reshape(array_shape)
-#        _data = np.arange(np.prod(shape[1:])).reshape(shape[1:])
-#
-#        if shape[0] > 1:
-#           data = np.stack([_data] * shape[0])
-#
-#        else:
-#            data = _data 
 
         with pyslabs.open(slabfile) as slabs:
-            outvar = slabs.get_reader("ndata", unstackable=True)
-            outdata = slabs.get_array("ndata", unstackable=True)
+            outvar = slabs.get_reader("ndata")
+            outdata = slabs.get_array("ndata")
 
         if not np.array_equal(data, outdata):
             print("FAIL: get_array mismatch")
@@ -365,10 +384,14 @@ def test_failecases():
 
             key = generate_randomkey(data.shape)
 
-            print("KEY: ", str(key))
             subdata = data.__getitem__(key) 
             suboutdata = outdata.__getitem__(key)
             suboutvar = outvar.__getitem__(key)
+
+            print("SHAPE, KEY, SUB_SHAPE (%d): " % subdata.size)
+            print(str(data.shape))
+            print(str(key))
+            print(str(subdata.shape))
 
             if subdata.size == 0:
                 if ((hasattr(suboutvar, "size") and suboutvar.size != 0) or

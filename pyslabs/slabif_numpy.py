@@ -5,6 +5,11 @@
 
 import numpy as np
 from io import BytesIO
+from pyslabs.util import DEBUG_LEVEL, DEBUG_INFO
+
+
+def length(slab, axis=0):
+    return np.size(slab, axis)
 
 
 def shape(ndarr):
@@ -36,6 +41,11 @@ def stack(stacker, lower):
 
     return stacker
 
+
+def expand_dim(slab):
+    return np.expand_dims(slab, axis=0)
+
+
 def concatenate(concater, panel,  axis=0):
 
     if concater is None:
@@ -48,3 +58,17 @@ def concatenate(concater, panel,  axis=0):
     return np.concatenate((concater, panel), axis=axis)
 
 
+def squeeze(array):
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Squeeze IN: ", array)
+
+    is_squeezed = False
+
+    if array.shape[0] == 1:
+        array = array[0]
+        is_squeezed = True
+
+    if DEBUG_LEVEL > DEBUG_INFO:
+        print("Squeeze OUT(array, is_squeezed): ", array, is_squeezed)
+
+    return is_squeezed, array

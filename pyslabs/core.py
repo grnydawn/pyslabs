@@ -20,6 +20,7 @@ from pyslabs.error import PE_Begin_Numproc
 from pyslabs.util import pickle_dump, clean_folder
 from pyslabs.write import VariableWriterV1
 from pyslabs.read import VariableReaderV1
+from pyslabs.slabif import _cache
 
 
 ##############################
@@ -559,17 +560,25 @@ class PyslabsReaderV1():
             output[entry_path[0]] = _output
             self._trie(_output, entry_path[1:], entry)
 
-    def get_reader(self, name, unstackable=False):
+    def get_reader(self, name):
 
         varcfg = self.config["vars"][name]
         dimcfg = self.config["dims"]
 
         return VariableReaderV1(self.tar_file, self.slab_tower[name],
-                varcfg, dimcfg, unstackable)
+                varcfg, dimcfg)
 
-    def get_array(self, name, unstackable=False):
+    def get_array(self, name, stack=None):
 
-        return self.get_reader(name, unstackable)[:]
+        if stack is None:
+            return self.get_reader(name)[:]
+
+        elif isinstance(stack, (int, slice)):
+            return self.get_reader(name).__getitem__(stack)
+
+        else:
+            return self.get_reader(name).__getitem__(*stack)
+
 
     def close(self):
 
@@ -707,6 +716,8 @@ def master_open(slab_path, mode="r", num_procs=None, workdir=None):
         return MasterPyslabsWriterV1(work_path, config)
 
     elif mode == "r":
+
+        _cache.clear()
 
         if num_procs is not None and num_procs > 1:
             print("ERROR: parallel-read is not supported, but 'num_procs' "
