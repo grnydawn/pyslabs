@@ -63,7 +63,7 @@ def generate_randomkey(shape):
 def writelist(myid):
 
     slabs = pyslabs.parallel_open(slabfile)
-    testvar = slabs.get_writer("test", mode="w", autostack=True)
+    testvar = slabs.get_writer("test", autostack=True)
 
     for i in range(NITER):
         mylist = [(myid, i)]*NSIZE
@@ -74,7 +74,7 @@ def writelist(myid):
 
 def writenumpy(myid, pdata, start, nwrites):
 
-    slabs = pyslabs.parallel_open(slabfile, mode="w")
+    slabs = pyslabs.parallel_open(slabfile)
     ndata = slabs.get_writer("ndata")
 
     for i in range(nwrites):
@@ -92,7 +92,7 @@ def test_list():
     data4 = [[61,62,63], [64,65,66], [67,68,69], [70,71,72], [73,74,75]]
 
     with pyslabs.open(slabfile, "w") as slabs:
-        myvar = slabs.get_writer("myvar", (5,3), autostack=True)
+        myvar = slabs.get_writer("myvar", shape=(5,5,3), autostack=True)
         myvar.write(data0)
         myvar.write(data1)
         myvar.write(data2)
@@ -127,13 +127,13 @@ def test_numpy():
     data = np.arange(100).reshape((nwrites,)+shape)
 
     with pyslabs.open(slabfile, "w") as slabs:
-        myvar = slabs.get_writer("myvar", shape, autostack=True)
+        myvar = slabs.get_writer("myvar", (nwrites,)+shape, autostack=True)
         for i in range(nwrites):
             myvar.write(data[i, :, :])
 
     assert os.path.isfile(slabfile)
 
-    with pyslabs.open(slabfile, "r") as slabs:
+    with pyslabs.open(slabfile) as slabs:
         myvar = slabs.get_reader("myvar")
 
         assert myvar.shape == (5, 4, 5)
@@ -148,7 +148,7 @@ def test_numpy():
 def test_multiprocessing():
     from multiprocessing import Process
 
-    slabs = pyslabs.master_open(slabfile, mode="w", num_procs=NPROCS)
+    slabs = pyslabs.master_open(slabfile, NPROCS)
 
     procs = []
 
@@ -157,7 +157,7 @@ def test_multiprocessing():
         p.start()
         procs.append(p)
 
-    testvar = slabs.get_writer("test", (NSIZE, 2))
+    testvar = slabs.get_writer("test", (NITER, NSIZE*NPROCS, 2))
 
     slabs.begin()
 
@@ -171,7 +171,7 @@ def test_multiprocessing():
 
     slabs.close()
 
-    slabs = pyslabs.open(slabfile, workdir=workdir, mode="r")
+    slabs = pyslabs.open(slabfile, workdir=workdir)
     var = slabs.get_reader("test")
     data = slabs.get_array("test")
 
@@ -245,9 +245,9 @@ def test_random():
         #s0 = shape[0]
         #shape[0] *= NPROCS
 
-        slabs = pyslabs.master_open(slabfile, mode="w", num_procs=NPROCS)
+        slabs = pyslabs.master_open(slabfile, NPROCS)
 
-        ndata = slabs.get_writer("ndata", slab_shape, autostack=True)
+        ndata = slabs.get_writer("ndata", array_shape, autostack=True)
 
         procs = []
 

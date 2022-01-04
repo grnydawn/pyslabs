@@ -25,9 +25,9 @@ def main():
     procs = []
 
     # for master process
-    slabs = pyslabs.master_open(slabfile, mode="w", num_procs=NPROCS)
+    slabs = pyslabs.master_open(slabfile, NPROCS)
 
-    testvar = slabs.get_writer("test", (NELEMS,))
+    testvar = slabs.get_writer("test", shape=(1, NELEMS*NPROCS))
 
     for i in range(NPROCS-1):
         p = Process(target=func, args=(i,))

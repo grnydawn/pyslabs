@@ -255,8 +255,15 @@ def get_array(tar_file, slab_tower, slab_shape, slab_key, stack_key, new_key=Non
 
         return is_squeezed, column
 
-    cidxes = sorted([int(k) for k in slab_tower.keys()])
-    nidxes = list(cidxes)[1:] + [slab_shape[0]]
+    cidxes = []
+    nidxes = []
+
+    skeys = [k.split("_") for k in slab_tower.keys()]
+    ikeys = sorted([(int(s), int(l)) for s, l in skeys], key=lambda x:x[0])
+    for s, l in ikeys:
+        cidxes.append(s)
+        nidxes.append(s+l)
+    assert nidxes[-1] == slab_shape[0]
 
     if isinstance(slab_key[0], int):
         is_slice = False
@@ -285,9 +292,10 @@ def get_array(tar_file, slab_tower, slab_shape, slab_key, stack_key, new_key=Non
     atype = None
     offset = 0
 
+    #import pdb; pdb.set_trace()
     for cidx, nidx in zip(cidxes, nidxes):
 
-        sub_tower = slab_tower[str(cidx)]
+        sub_tower = slab_tower[str(cidx)+"_"+str(nidx-cidx)]
 
         if nidx <= ckey.start:
             continue

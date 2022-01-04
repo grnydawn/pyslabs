@@ -54,3 +54,8 @@ class PE_Stabif_Typemismatch(Pyslabs_Error):
 class PE_Util_Typemismatch(Pyslabs_Error):
     pass
 
+
+class PE_Close_Startindexerror(Pyslabs_Error):
+    pass
+
+

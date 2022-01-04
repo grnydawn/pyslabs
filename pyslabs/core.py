@@ -16,7 +16,7 @@ from pyslabs.const import (SLAB_EXT, ZLAB_EXT, TMP_BEGIN, TMP_WORK, INIT_BEGIN,
                            INIT_CONFIG, INIT_VARCFG, INIT_DIMCFG, CONFIG_FILE,
                            FINISH_FILE, INIT_TIMEOUT, FINI_TIMEOUT, VARCFG_FILE,
                            UNLIMITED)
-from pyslabs.error import PE_Begin_Numproc
+from pyslabs.error import PE_Begin_Numproc, PE_Close_Startindexerror, PE_Close_Shapemismatch
 from pyslabs.util import pickle_dump, clean_folder
 from pyslabs.write import VariableWriterV1
 from pyslabs.read import VariableReaderV1
@@ -109,35 +109,34 @@ class PyslabsWriterV1(object):
 # master implementation of pyslabs 
 class MasterPyslabsWriterV1(PyslabsWriterV1):
 
-    def get_writer(self, name, slab_shape, array_shape=None, autostack=False, **kwargs):
-
-        if not slab_shape:
-            slab_shape = tuple()
+    def get_writer(self, name, shape=None, autostack=False, **kwargs):
 
         var_cfg = copy.deepcopy(INIT_VARCFG)
 
-        if array_shape is None:
-            stack = self.define_stack("stack", UNLIMITED)
+        if shape is not None:
+            sh = []
+            for i, l in enumerate(shape):
+                if isinstance(l, Dimension):
+                    sh.append(l)
 
-        elif len(array_shape) != (len(slab_shape)+1):
-            raise PE_Write_Wrongarrayshape("%d, but should be %d" %
-                len(array_shape), (len(slab_shape)+1))
+                elif isinstance(l, int):
+                    if i == 0:
+                        self.define_stack("stack", l)
+                    else:
+                        self.define_dim("dim%d"%i, l)
+ 
+                elif l is None:
+                    if i == 0:
+                        self.define_stack("stack", UNLIMITED)
+                    else:
+                        self.define_dim("dim%d"%i, UNLIMITED)
+               
+                else:
+                    raise PE_Core_Invalidshapetype(str(shape))
 
-        elif isinstance(array_shape[0], StackDimension):
-            stack = array_shape[0]
+            shape = tuple(shape)
 
-        else:
-            stack = self.define_stack("stack", int(array_shape[0]))
-
-        array_shape = [stack]
-
-        for i, s in enumerate(slab_shape):
-            dim = (s if isinstance(s, Dimension) else
-                self.define_dim("dim%d"%(i+1), None))
-            array_shape.append(dim)
-
-        var_cfg["check"]["slab_shape"] = tuple(slab_shape)
-        var_cfg["check"]["array_shape"] = tuple(array_shape)
+        var_cfg["check"]["shape"] = shape
         var_cfg["stack"]["auto"] = autostack
         var_cfg["attrs"].update(dict((k[5:],v) for k,v in kwargs.items() if
                                 k.startswith("attr_")))
@@ -234,66 +233,76 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
         if os.path.isfile(begin_path):
             os.remove(begin_path)
 
-        def _scan(dim, start, slab_shape):
+        # dim: dimension to scan, start indices of the dimension, slab_shape
+        # TODO : get shape info from var config of each procs
+        #def _scan(dim, start, slab_shape):
+        def _scan(dim, start_length):
 
             st = None
             sh = None
+            prev_st_len = None
 
-            for idx in sorted(start.keys()):
+            # sorted start indices
+            for st_len in sorted(start_length.keys(), key=lambda x:x[0]):
 
-                next_dim = start[idx]
+                # indices of next dimension
+                next_dim = start_length[st_len]
 
-                if isinstance(next_dim, int):
+                # if stack dimension
+                if next_dim is None:
 
-                    if len(start) != 1:
-                        raise PE_Close_Wrongstacklength(len(start))
-
-                    return [idx], [next_dim]
+                    # return start index and # of slabs
+                    return [st_len[0]], [st_len[1]]
 
                 else:
-                    _st, _sh = _scan(dim+1, next_dim, slab_shape)
+                    # if non-stack dimension, go to next dimension
+                    _st, _sh = _scan(dim+1, next_dim)
+                    # return with start and shape
 
+                    # if the first index
                     if st is None:
-                        st = [idx] + _st
-                    elif idx != sh[0]:
-                        raise PE_Close_Startindexerror("%d != %d" % (idx, sh[0]))
+                        st = [st_len[0]] + _st
+                    elif sum(prev_st_len) != sh[0]:
+                        raise PE_Close_Startindexerror("%s != %d" % (prev_st_len, sh[0]))
 
                     if sh is None:
-                        sh = [slab_shape[dim]] + _sh
+                        sh = [st_len[1]] + _sh
                     else:
-                        sh[0] += slab_shape[dim]
+                        sh[0] = sum(st_len)
+
+                prev_st_len = st_len
 
             return st, sh
 
-        def _move_dim(src, dst, start):
+        def _move_dim(src, dst, start_length):
 
             nslabs = None
 
-            for dim in os.listdir(src):
+            for idx_len in os.listdir(src):
 
-                src_path = os.path.join(src, dim)
-                dst_path = os.path.join(dst, dim)
+                src_path = os.path.join(src, idx_len)
+                dst_path = os.path.join(dst, idx_len)
 
                 if os.path.isdir(src_path):
 
-                    int_dim = int(dim)
+                    st_len = tuple(int(i) for i in idx_len.split("_"))
 
-                    if int_dim not in start:
-                        dim_start = {}
-                        start[int_dim] = dim_start
+                    if st_len not in start_length:
+                        dim_st_len = {}
+                        start_length[st_len] = dim_st_len
 
                     else:
-                        dim_start = start[int_dim]
+                        dim_st_len = start_length[st_len]
 
                     if os.path.isdir(dst_path):
-                        _move_dim(src_path, dst_path, dim_start)
+                        _move_dim(src_path, dst_path, dim_st_len)
 
                     elif os.path.exists(dst_path):
                         raise PE_Close_DestExist(dst_path)
 
                     else:
                         os.makedirs(dst_path)
-                        _move_dim(src_path, dst_path, dim_start)
+                        _move_dim(src_path, dst_path, dim_st_len)
                         #shutil.move(src_path, dst_path)
 
                 elif os.path.exists(dst_path):
@@ -304,7 +313,7 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
                     shutil.move(src_path, dst_path)
 
             if nslabs is not None:
-                start[0] = nslabs
+                start_length[(0, nslabs)] = None
 
         def _move_proc(src, dst, attrs):
 
@@ -314,7 +323,11 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
                 src_path = os.path.join(src, var)
 
                 if not var.startswith("_") and var not in attrs["vars"]:
-                    attrs["vars"][var] = {"config": [], "start":{}}
+                    start_length = {}
+                    attrs["vars"][var] = {"config": [], "start_length":start_length}
+
+                else:
+                    start_length = attrs["vars"][var]["start_length"]
 
                 cfg_path = os.path.join(src_path, VARCFG_FILE)
 
@@ -327,7 +340,7 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
                 if not os.path.isdir(dst_path):
                     os.makedirs(dst_path)
 
-                _move_dim(src_path, dst_path, attrs["vars"][var]["start"])
+                _move_dim(src_path, dst_path, start_length)
 
 #        def _get_shape(writes):
 #
@@ -409,20 +422,23 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
 
         # merge shape from each proc
         for var_name, var_info in attrs["vars"].items():
-            slab_shape = var_info["config"][0]["check"]["slab_shape"]
-            start[var_name], shape[var_name] = _scan(0, var_info["start"], slab_shape)
+            start[var_name], shape[var_name] = _scan(0, var_info["start_length"])
             shape[var_name] = [shape[var_name][-1]] + shape[var_name][:-1]
 
-            for idx, sh in enumerate(var_info["config"][0]["check"]["array_shape"]):
+            if var_info["config"][0]["check"]["shape"] is None:
+                continue
 
-                dim_cfg = self.config["dims"][sh.name]
+            for idx, sh in enumerate(var_info["config"][0]["check"]["shape"]):
 
-                if dim_cfg["length"] is None or dim_cfg["length"] == UNLIMITED:
-                    dim_cfg["length"] = shape[var_name][idx]
+                if hasattr(sh, "name"):
+                    dim_cfg = self.config["dims"][sh.name]
 
-                elif dim_cfg["length"] != shape[var_name][idx]:
-                    raise PE_Close_Stackdimmismatch("%d != %d" %
-                        (dim_cfg["length"], shape[var_name][idx]))
+                    if dim_cfg["length"] is None or dim_cfg["length"] == UNLIMITED:
+                        dim_cfg["length"] = shape[var_name][idx]
+
+                    elif dim_cfg["length"] != shape[var_name][idx]:
+                        raise PE_Close_Stackdimmismatch("%d != %d" %
+                            (dim_cfg["length"], shape[var_name][idx]))
 
         for name, var_cfg in self.config["vars"].items():
 
@@ -434,21 +450,34 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
                 for check in var_cfg["check"].keys(): 
 
                     dim_checks = var_cfg["check"][check]
-                    if check == "array_shape":
+                    if dim_checks is None:
+                        continue
+
+                    if check == "shape":
                         if isinstance(dim_checks, StackDimension):
                             dim_checks.check(shape[name][0])
                             var_cfg["shape"] = test.name
 
                         elif len(dim_checks) > 0:
-                            dim_checks[0].check(shape[name][0])
-                            var_cfg["shape"][0] = dim_checks[0].name
+
+                            if isinstance(dim_checks[0], Dimension):
+                                dim_checks[0].check(shape[name][0])
+                                var_cfg["shape"][0] = dim_checks[0].name
+                            elif (dim_checks[0] is not None and dim_checks[0] !=
+                                UNLIMITED and shape[name][0] != dim_checks[0]):
+                                raise PE_Close_Shapemismatch("%d != %d" %
+                                        (shape[name][0], dim_checks[0]))
 
                             for i, (dim_check, length) in enumerate(
                                     zip(dim_checks[1:], shape[name][1:])):
-                                dim_check.check(length)
-                                var_cfg["shape"][i+1] = dim_check.name
-                    elif check == "slab_shape":
-                        pass
+
+                                if isinstance(dim_check, Dimension):
+                                    dim_check.check(length)
+                                    var_cfg["shape"][i+1] = dim_check.name
+                                elif (dim_check is not None and dim_check !=
+                                    UNLIMITED and shape[name][i+1] != dim_check):
+                                    raise PE_Close_Shapemismatch("%d != %d" %
+                                            (shape[name][i+1], dim_check))
 
                     else:
                         raise PE_Close_Unknowncheck(check)
@@ -687,13 +716,9 @@ class MasterPyslabsReaderV1(PyslabsReaderV1):
 
 
 # open slab I/O for master process
-def master_open(slab_path, mode="r", num_procs=None, workdir=None):
+def master_open(slab_path, num_procs, mode="w", workdir=None):
 
     if mode == "w":
-
-        if num_procs is None:
-            print("ERROR: 'num_procs' argument should be set in the 'write' mode")
-            sys.exit(-1)
 
         slab_path, begin_path, work_path = _write_paths(slab_path, workdir)
 
@@ -776,5 +801,4 @@ def parallel_open(slab_path, mode="w"):
 # the wrapper of "master_open" for convinience
 def open(slab_path, mode="r", num_procs=1, workdir=None):
 
-    return master_open(slab_path, mode=mode, num_procs=num_procs,
-                        workdir=workdir)
+    return master_open(slab_path, num_procs, mode=mode, workdir=workdir)

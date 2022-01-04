@@ -15,7 +15,7 @@ class VariableWriterV1():
 
         self.path = path
         self.config = config
-        self.check_shape = config["check"]["slab_shape"]
+        self.check_shape = config["check"]["shape"]
         self.auto_stack = config["stack"]["auto"]
         self.level = 0
 
@@ -35,11 +35,6 @@ class VariableWriterV1():
         # get slab info
         slab_shape = slabif.shape(slab)
 
-        # shape check
-        if self.check_shape != slab_shape:
-            raise PE_Slab_Shapemismatch("%s != %s" %
-                    (str(self.check_shape), str(slab_shape)))
-
         # normalize start 
         if start is None:
             start = (0,) * len(slab_shape)
@@ -53,8 +48,8 @@ class VariableWriterV1():
         # generate relative path to data file
         rel_path = []
 
-        for _s in start:
-            rel_path.append(str(_s))
+        for st, sh in zip(start, slab_shape):
+            rel_path.append(str(st)+"_"+str(sh))
 
         strlevel = str(self.level) if level is None else str(level)
 

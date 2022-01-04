@@ -12,8 +12,9 @@ supported_array_types = {
                         type(a).__module__== "numpy"), "npy")
 }
 
-DEBUG_NONE, DEBUG_MAJOR, DEBUG_MINOR, DEBUG_INFO = range(4)
+DEBUG_NONE, DEBUG_MAJOR, DEBUG_MINOR, DEBUG_INFO, DEBUG_ALL = range(5)
 DEBUG_LEVEL = DEBUG_MAJOR
+#DEBUG_LEVEL = DEBUG_ALL
 
 class ScalarList():
 

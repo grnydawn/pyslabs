@@ -49,13 +49,13 @@ def test_tuple():
     data1 = (4,5,6)
 
     with pyslabs.open(slabfile, mode="w") as slabs:
-        myvar = slabs.get_writer("myvar", (3,), autostack=True)
+        myvar = slabs.get_writer("myvar", (2, 3), autostack=True)
         myvar.write(data0)
         myvar.write(data1)
 
     assert os.path.isfile(slabfile)
 
-    with pyslabs.open(slabfile, "r") as slabs:
+    with pyslabs.open(slabfile) as slabs:
         myarr = slabs.get_array("myvar")
 
     assert type(myarr) == type(data0)
