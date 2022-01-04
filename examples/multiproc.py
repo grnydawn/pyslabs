@@ -43,7 +43,7 @@ def main():
     slabs.close()
 
     with pyslabs.open(slabfile, "r") as slabs:
-        data = slabs.get_array("test", unstackable=True)
+        data = slabs.get_array("test")
 
     print(type(data))
     print(data)
