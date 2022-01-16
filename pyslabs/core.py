@@ -797,10 +797,14 @@ def parallel_open(slab_path, mode="w"):
 
         while time.time() - start < INIT_TIMEOUT:
             if os.path.isfile(begin_path):
-                with io.open(begin_path, "rb") as fp:
-                    begin = pickle.load(fp)
-                    work_path = begin["work_path"]
-                break
+                try:
+                    with io.open(begin_path, "rb") as fp:
+                        begin = pickle.load(fp)
+                        work_path = begin["work_path"]
+                    break
+                except pickle.UnpicklingError as err:
+                    pass
+
             time.sleep(0.1)
 
         if begin is None:
