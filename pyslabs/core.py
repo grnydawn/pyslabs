@@ -31,15 +31,46 @@ def _write_paths(slab_path, work_path):
 
     if slab_path.endswith(SLAB_EXT) or slab_path.endswith(ZLAB_EXT):
         base, ext = os.path.splitext(slab_path)
-        begin_path = base + TMP_BEGIN
+
         if work_path is None:
+            begin_path = base + TMP_BEGIN
             work_path = base + TMP_WORK
+
+        else:
+            begin_path = os.path.join(work_path, TMP_BEGIN)
+
     else:
 
-        begin_path = slab_path + TMP_BEGIN
         if work_path is None:
+            begin_path = slab_path + TMP_BEGIN
             work_path = base + TMP_WORK
+
+        else:
+            begin_path = os.path.join(work_path, TMP_BEGIN)
+
         slab_path += SLAB_EXT
+
+#
+#    if slab_path.endswith(SLAB_EXT) or slab_path.endswith(ZLAB_EXT):
+#        base, ext = os.path.splitext(slab_path)
+#
+#        if work_path is None:
+#            begin_path = base + TMP_BEGIN
+#            work_path = base + TMP_WORK
+#
+#        else:
+#            begin_path = work_path + TMP_BEGIN
+#
+#    else:
+#
+#        if work_path is None:
+#            begin_path = slab_path + TMP_BEGIN
+#            work_path = base + TMP_WORK
+#
+#        else:
+#            begin_path = work_path + TMP_BEGIN
+#
+#        slab_path += SLAB_EXT
 
     return slab_path, begin_path, work_path
 
@@ -722,6 +753,10 @@ def master_open(slab_path, num_procs, mode="w", workdir=None):
 
         slab_path, begin_path, work_path = _write_paths(slab_path, workdir)
 
+        # create root directory
+        os.makedirs(work_path, exist_ok=True)
+        clean_folder(work_path)
+
         begin = copy.deepcopy(INIT_BEGIN)
         begin["work_path"] = work_path
         begin["slab_path"] = slab_path
@@ -730,8 +765,8 @@ def master_open(slab_path, num_procs, mode="w", workdir=None):
         pickle_dump(begin_path, begin)
         
         # create root directory
-        os.makedirs(work_path, exist_ok=True)
-        clean_folder(work_path)
+#        os.makedirs(work_path, exist_ok=True)
+#        clean_folder(work_path)
 
         config = copy.deepcopy(INIT_CONFIG)
         config["_control_"]["num_procs"] = num_procs
