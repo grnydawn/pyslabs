@@ -29,24 +29,18 @@ from pyslabs.slabif import _cache
 
 def _write_paths(slab_path, work_path):
 
+    begin_path = slab_path
+
     if slab_path.endswith(SLAB_EXT) or slab_path.endswith(ZLAB_EXT):
         base, ext = os.path.splitext(slab_path)
 
         if work_path is None:
-            begin_path = base + TMP_BEGIN
             work_path = base + TMP_WORK
-
-        else:
-            begin_path = os.path.join(work_path, TMP_BEGIN)
 
     else:
 
         if work_path is None:
-            begin_path = slab_path + TMP_BEGIN
             work_path = base + TMP_WORK
-
-        else:
-            begin_path = os.path.join(work_path, TMP_BEGIN)
 
         slab_path += SLAB_EXT
 
@@ -252,17 +246,17 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
             if len(procs) == num_procs:
                 break
 
+        begin_path = self.config["_control_"]["begin_path"]
+
+        if os.path.isfile(begin_path):
+            os.remove(begin_path)
+
         if len(procs) != num_procs:
             raise PE_Begin_Numproc("%d != %d" %(len(procs), num_procs))
 
     def close(self):
 
         super(MasterPyslabsWriterV1, self).close()
-
-        begin_path = self.config["_control_"]["begin_path"]
-
-        if os.path.isfile(begin_path):
-            os.remove(begin_path)
 
         # dim: dimension to scan, start indices of the dimension, slab_shape
         # TODO : get shape info from var config of each procs
@@ -810,7 +804,7 @@ def parallel_open(slab_path, mode="w"):
             time.sleep(0.1)
 
         if begin is None:
-            raise PE_Init_Nobeginfile(slab_path)
+            raise PE_Init_Nobeginfile(begin_path)
 
         while time.time() - start < INIT_TIMEOUT:
             cfg_path = os.path.join(work_path, CONFIG_FILE)
