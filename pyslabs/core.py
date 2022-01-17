@@ -802,7 +802,7 @@ def parallel_open(slab_path, mode="w"):
                         begin = pickle.load(fp)
                         work_path = begin["work_path"]
                     break
-                except pickle.UnpicklingError as err:
+                except (pickle.UnpicklingError, EOFError) as err:
                     pass
 
             time.sleep(0.1)
