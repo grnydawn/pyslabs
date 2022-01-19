@@ -15,4 +15,4 @@ To work with pyslabs source code, use git to download from the github repository
 
 To verify pyslabs installation, run the pyslabs command-line tool::
 
-    $ slabs --version # under development
+    $ slabs --version
