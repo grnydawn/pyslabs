@@ -165,16 +165,16 @@ class LocalDomain():
 
         # create file
         if self.is_master():
-            self.slabs = pyslabs.master_open(outfile, self.nranks, workdir=workdir, mode="w")
+            self.slabs = pyslabs.master_open(outfile, self.nranks, workdir=workdir)
 
         else:
             # wait master
             self.slabs = pyslabs.parallel_open(outfile)
 
-        self.dens_writer = self.slabs.get_writer("dens")
-        self.umom_writer = self.slabs.get_writer("umom")
-        self.wmom_writer = self.slabs.get_writer("wmom")
-        self.rhot_writer = self.slabs.get_writer("rhot")
+        self.dens_writer = self.slabs.get_writer("dens", (None, self.nx_glob, self.nz_glob), autostack=True)
+        self.umom_writer = self.slabs.get_writer("umom", (None, self.nx_glob, self.nz_glob), autostack=True)
+        self.wmom_writer = self.slabs.get_writer("wmom", (None, self.nx_glob, self.nz_glob), autostack=True)
+        self.rhot_writer = self.slabs.get_writer("rhot", (None, self.nx_glob, self.nz_glob), autostack=True)
 
         self.slabs.begin()
 

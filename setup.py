@@ -3,9 +3,9 @@
 def main():
 
     from setuptools import setup, find_packages
-    from pyslabs.info import name, version, description, long_description, author
+    from pyslabs.const import name, version, description, long_description, author
 
-    console_scripts = ["slabs=pyslabs.__main__:main"]
+    console_scripts = ["slabs=pyslabs.command:main"]
     keywords = ["Parallel I/O", "pyslabs"]
 
     setup(

@@ -7,12 +7,12 @@ import pyslabs
 here = os.path.dirname(__file__)
 slabfile = os.path.join(here, "test.slab")
 NPROCS = 3
-NELEMS = 3
+NELEMS = 4
 
 # for parallel execution
 def func(myid):
 
-    slabs = pyslabs.parallel_open(slabfile, mode="w")
+    slabs = pyslabs.parallel_open(slabfile)
 
     testvar = slabs.get_writer("test")
 
@@ -25,9 +25,9 @@ def main():
     procs = []
 
     # for master process
-    slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
+    slabs = pyslabs.master_open(slabfile, NPROCS)
 
-    testvar = slabs.get_writer("test")
+    testvar = slabs.get_writer("test", shape=(1, NELEMS*NPROCS))
 
     for i in range(NPROCS-1):
         p = Process(target=func, args=(i,))
@@ -38,12 +38,12 @@ def main():
     slabs.begin()
 
     # arguments: (array, starting index)
-    testvar.write(numpy.ones(3)*(NPROCS-1), NELEMS*(NPROCS-1))
+    testvar.write(numpy.ones(NELEMS)*(NPROCS-1), NELEMS*(NPROCS-1))
 
     slabs.close()
 
-    with pyslabs.master_open(slabfile, mode="r") as slabs:
-        data = slabs.get_array("test", squeeze=True)
+    with pyslabs.open(slabfile, "r") as slabs:
+        data = slabs.get_array("test")
 
     print(type(data))
     print(data)

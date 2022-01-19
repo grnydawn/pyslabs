@@ -165,15 +165,25 @@ class LocalDomain():
 
         # create file
         if self.is_master():
-            self.slabs = pyslabs.master_open(outfile, self.nranks, workdir=workdir, mode="w")
+            self.slabs = pyslabs.master_open(outfile, mode="w", num_procs=self.nranks, workdir=workdir)
+
+            lon = self.slabs.define_dim("lon", self.nx_glob, origin=(0., "O"),
+                points=None, unit=(self.dx, "meter"), desc="longitude", attr_test="T") 
+            height = self.slabs.define_dim("height", self.nz_glob, origin=(0., "O"),
+                unit=(self.dz, "meter"), desc="latitude") 
+            time = self.slabs.define_stack("time", pyslabs.UNLIMITED, origin=0,
+                unit=(self.dt, "second"), desc="time") 
 
         else:
             self.slabs = pyslabs.parallel_open(outfile)
+            lon = self.slabs.get_dim("lon")
+            height = self.slabs.get_dim("height")
+            time = self.slabs.get_stack("time")
 
-        self.dens_writer = self.slabs.get_writer("dens")
-        self.umom_writer = self.slabs.get_writer("umom")
-        self.wmom_writer = self.slabs.get_writer("wmom")
-        self.rhot_writer = self.slabs.get_writer("rhot")
+        self.dens_writer = self.slabs.get_writer("dens", shape=(time, lon, height), attr_step="at", autostack=True)
+        self.umom_writer = self.slabs.get_writer("umom", (None, self.nx_glob, self.nz_glob), autostack=True)
+        self.wmom_writer = self.slabs.get_writer("wmom", (None, self.nx_glob, self.nz_glob), autostack=True)
+        self.rhot_writer = self.slabs.get_writer("rhot", (None, self.nx_glob, self.nz_glob), autostack=True)
 
         self.slabs.begin()
 
@@ -471,34 +481,38 @@ def main():
     if domain.is_master():
         start_time = time.time()
 
-    while etime < argps.simtime:
+    try:
+        while etime < argps.simtime:
 
-        if etime + domain.dt > argps.simtime:
-            domain.dt = argps.simtime - etime
+            if etime + domain.dt > argps.simtime:
+                domain.dt = argps.simtime - etime
 
-        domain.timestep()
+            domain.timestep()
 
-        if domain.is_master():
-            print("Elapsed Time: %10.3f / %10.3f" % (etime, argps.simtime))
+            if domain.is_master():
+                print("Elapsed Time: %10.3f / %10.3f" % (etime, argps.simtime))
 
-        etime = etime + domain.dt 
+            etime = etime + domain.dt 
 
-        output_counter = output_counter + domain.dt 
-        if output_counter >= argps.outfreq:
-#
-#            print("")
-#            print("%d state sum: %f" % (self.rank, self.state.sum()))
-#            print("%d state_tmp sum: %f" % (self.rank, self.state_tmp.sum()))
-#            print("%d hy_dens_cell sum: %f" % (self.rank, self.hy_dens_cell.sum()))
-#            print("%d hy_dens_theta_cell sum: %f" % (self.rank, self.hy_dens_theta_cell.sum()))
-#            print("%d hy_dens_int sum: %f" % (self.rank, self.hy_dens_int.sum()))
-#            print("%d hy_dens_theta_int sum: %f" % (self.rank, self.hy_dens_theta_int.sum()))
-#            print("%d hy_pressure_int sum: %f" % (self.rank, self.hy_pressure_int.sum()))
-#            print("%d tend sum: %f" % (self.rank, self.tend.sum()))
-#            print("%d flux sum: %f" % (self.rank, self.flux.sum()))
-#            sys.exit(0)
-            output_counter = output_counter - argps.outfreq
-            domain.output(etime)
+            output_counter = output_counter + domain.dt 
+            if output_counter >= argps.outfreq:
+    #
+    #            print("")
+    #            print("%d state sum: %f" % (self.rank, self.state.sum()))
+    #            print("%d state_tmp sum: %f" % (self.rank, self.state_tmp.sum()))
+    #            print("%d hy_dens_cell sum: %f" % (self.rank, self.hy_dens_cell.sum()))
+    #            print("%d hy_dens_theta_cell sum: %f" % (self.rank, self.hy_dens_theta_cell.sum()))
+    #            print("%d hy_dens_int sum: %f" % (self.rank, self.hy_dens_int.sum()))
+    #            print("%d hy_dens_theta_int sum: %f" % (self.rank, self.hy_dens_theta_int.sum()))
+    #            print("%d hy_pressure_int sum: %f" % (self.rank, self.hy_pressure_int.sum()))
+    #            print("%d tend sum: %f" % (self.rank, self.tend.sum()))
+    #            print("%d flux sum: %f" % (self.rank, self.flux.sum()))
+    #            sys.exit(0)
+                output_counter = output_counter - argps.outfreq
+                domain.output(etime)
+
+    except Exception as err:
+        domain.comm.Abort()
 
     if domain.is_master():
         print("CPU Time: %f" % (time.time() - start_time))
