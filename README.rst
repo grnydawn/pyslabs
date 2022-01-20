@@ -40,12 +40,12 @@ Generating a slab file
 
 Open a file using Pyslab context manager::
 
-    >>> import pyslab
+    >>> import pyslabs
     >>> data0 = (1,2,3)
     >>> data1 = (4,5,6)
     >>>
     >>> with pyslabs.open("mydata.slab", mode="w") as slabs:
-    ...     myvar = slabs.define_writer("myvar")
+    ...     myvar = slabs.get_writer("myvar", autostack=True)
     ...     myvar.write(data0)
     ...     myvar.write(data1)
     ...
@@ -57,7 +57,7 @@ Reading a slab file
 
 Now, let's examine the slab file generated at the previous step::
 
-    >>> with pyslabs.open("mydata.slab", "r") as slabs:
+    >>> with pyslabs.open("mydata.slab", mode="r") as slabs:
     >>>     myarr = slabs.get_array("myvar")
     >>> myarr
     ((1, 2, 3), (4, 5, 6))
@@ -71,52 +71,48 @@ Using Pyslabs in multiprocessing
 
 From the beginnig, Pyslabs is desinged to work in multiprocessing environment. First, let me take an example of using Pyslabs on multiple processes created by Python multiprocessing module. I left only the code lines relevant to Pyslabs here. Full code can be found in "examples" directory of Pyslabs Github repository::
 
-    >>> # for parallel execution
-    >>> def func(myid):
-    >>>     slabs = pyslabs.parallel_open(slabfile, mode="w")
-    >>>
-    >>>     testvar = slabs.get_var("test")
-    >>>     # arguments: (array, starting index)
-    >>>     testvar.write(numpy.ones(NELEMS)*myid, myid*NELEMS)
-    >>>
-    >>>     slabs.close()
-    >>>
-    >>> for i in range(NPROCS-1):
-    >>>     p = Process(target=func, args=(i,))
-    >>>
-    >>> # for master process
-    >>> slabs = pyslabs.master_open(slabfile, mode="w", nprocs=NPROCS)
-    >>> testvar = slabs.define_var("test")
-    >>>
-    >>> slabs.begin()
-    >>>
-    >>> # arguments: (array, starting index)
-    >>> testvar.write(numpy.ones(3)*(NPROCS-1), NPROCS-1)
-    >>>
-    >>> slabs.close()
-    >>>
-    >>> with pyslabs.master_open(slabfile, mode="r") as slabs:
-    >>>     data = slabs.get_array("test")
-    >>>
-    >>> type(data)
-    <class 'numpy.ndarray'>
-    >>> data
-    [0. 0. 0. 1. 1. 1. 2. 2. 2.]
+        def writelist(myid):
+
+            slabs = pyslabs.parallel_open(slabfile)
+            testvar = slabs.get_writer("test")
+
+            slabs.begin()
+
+            for i in range(NITER):
+                mylist = [(myid, i)]*NSIZE
+                testvar.write(mylist, start=(myid*NSIZE, 0))
+                testvar.stacking()
+
+            slabs.close()
+
+        slabs = pyslabs.master_open(slabfile, NPROCS)
+
+        testvar = slabs.get_writer("test", (NITER, NSIZE*NPROCS, 2))
+
+        procs = []
+
+        for i in range(NPROCS-1):
+        p = Process(target=writelist, args=(i+1,))
+        p.start()
+        procs.append(p)
+
+        # should be located after child processes began
+        slabs.begin()
+
+        for i in range(NITER):
+        mylist = [(0, i)]*NSIZE
+        testvar.write(mylist, start=(0, 0))
+        testvar.stacking()
+
+
+        for i in range(NPROCS-1):
+        procs[i].join()
+
+        slabs.close()
 
 
 Using Pyslabs with MPI
 ----------------------
 
-Pyslabs can work in distributed computing environment such as MPI. I left only the code lines relevant to Pyslabs here. Full code can be found in "tests" directory of Pyslabs Github repository::
-
-    >>>
-
-
-
-(Almost) unlimited data type supports
-----------------------------------------
-
-Pyslabs works transparently in terms of data format. Pyslabs does have a thin layer of interface to well-known frameworks such as Numpy. In case that Pyslabs can not find a proper interface for a data, it falls back to Python pickle. Therefore Pyslabs can support any pickle-able object as a data format::
-
-    >>>
+Pyslabs can work in distributed computing environment such as MPI. Please see MPI example at `PyWeather <https://github.com/grnydawn/pyweather/tree/master/miniweather>`_ .
 
