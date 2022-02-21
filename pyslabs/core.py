@@ -520,7 +520,10 @@ class MasterPyslabsWriterV1(PyslabsWriterV1):
                 item_path = os.path.join(self.work_path, item)
                 tar.add(item_path, arcname=item)
 
-        shutil.rmtree(self.work_path)
+        try:
+            shutil.rmtree(self.work_path)
+        except OSError:
+            pass
 
 
     def __enter__(self):
